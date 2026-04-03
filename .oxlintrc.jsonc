@@ -1,0 +1,36 @@
+/**
+ * OxLint Configuration
+ * Rust-based linter for JavaScript, TypeScript, JSX, and TSX
+ * Docs: https://oxc.rs/docs/guide/usage.html
+ */
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Environment detection - enables appropriate global variables and syntax
+  "env": {
+    "es2022": true, // Enable ES2022 syntax (latest ECMAScript features)
+    "browser": true, // Enable browser globals (window, document, etc.)
+    "node": true, // Enable Node.js globals (process, require, etc.)
+  },
+
+  // Define global variables that should be recognized
+  "globals": {
+    "Bun": "readonly", // Bun runtime global - available in all files
+  },
+
+  // Linter settings and plugin options
+  "settings": {
+    "jscDoc": true, // Enable JSDoc comment validation
+    "react": {
+      "version": "18", // React version - enables React-specific rules
+    },
+  },
+
+  // Patterns to exclude from linting
+  "ignorePatterns": [
+    "dist", // Built/compiled output
+    "build", // Build artifacts
+    "node_modules", // Dependencies
+    ".git", // Git directory
+    ".env*", // Environment variable files
+  ],
+}

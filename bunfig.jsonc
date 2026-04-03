@@ -1,0 +1,34 @@
+/**
+ * Bun Runtime Configuration (Root/Monorepo)
+ * Applies to all workspaces: packages/* and playground
+ * Docs: https://bun.sh/docs/runtime/bunfig
+ */
+{
+  // Test runner configuration
+  "test": {
+    // Files to preload before running tests - useful for global setup
+    "preload": ["./test-setup.ts"],
+    // Root directory for test discovery
+    "root": ".",
+  },
+
+  // Build configuration defaults
+  "build": {
+    // Root directory for resolving imports
+    "root": ".",
+    // Minify output JavaScript (reduces file size)
+    "minify": true,
+    // Generate separate source maps for debugging
+    "sourcemap": "external",
+  },
+
+  // Development server defaults (used by bun --hot)
+  "dev": {
+    // Port for dev server (can be overridden per workspace)
+    "port": 3000,
+    // Listen on all network interfaces (not just localhost)
+    "host": "0.0.0.0",
+    // Auto-reload on file changes
+    "reload": true,
+  },
+}

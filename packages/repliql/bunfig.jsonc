@@ -1,0 +1,25 @@
+/**
+ * Bun Configuration for @repliql/core
+ * Library package - configured for ESM output suitable for npm publishing
+ */
+{
+  // Build configuration optimized for npm packages
+  "build": {
+    // Target Node.js runtime (not browser-only)
+    "target": "node",
+    // Output format: ESM (ES Modules) - modern standard for code distribution
+    "format": "esm",
+    // Minify JavaScript to reduce bundle size
+    "minify": true,
+    // Generate separate .map files for debugging production code
+    "sourcemap": "external",
+    // Do not split code into multiple files (single entry point)
+    "splitting": false,
+  },
+
+  // Test configuration
+  "test": {
+    // Root directory for test discovery
+    "root": ".",
+  },
+}
