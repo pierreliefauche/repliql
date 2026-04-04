@@ -1,10 +1,9 @@
 import { useQuery } from 'urql';
 import { ISSUE_DETAIL_QUERY } from '@/lib/queries';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DateTime } from 'luxon';
-import { ArrowSquareOut } from '@phosphor-icons/react';
+import { ArrowSquareOut, X } from '@phosphor-icons/react';
 
 const priorityLabels: Record<number, string> = {
   0: 'No priority',
@@ -22,49 +21,43 @@ const priorityColors: Record<number, string> = {
   4: 'bg-muted text-muted-foreground',
 };
 
-interface IssueDetailSheetProps {
-  issueId: string | null;
+interface IssueDetailProps {
+  issueId: string;
   onClose: () => void;
 }
 
-export function IssueDetailSheet({ issueId, onClose }: IssueDetailSheetProps) {
+export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
   const [{ data, fetching }] = useQuery({
     query: ISSUE_DETAIL_QUERY,
-    variables: { id: issueId! },
-    pause: !issueId,
+    variables: { id: issueId },
   });
 
   const issue = data?.issue;
 
   return (
-    <Sheet open={!!issueId} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
-          {fetching ? (
-            <>
-              <Skeleton className="h-5 w-24" />
-              <Skeleton className="h-6 w-full" />
-            </>
-          ) : issue ? (
-            <>
-              <SheetDescription className="font-mono text-xs">
-                {issue.identifier}
-              </SheetDescription>
-              <SheetTitle className="text-base">{issue.title}</SheetTitle>
-            </>
-          ) : (
-            <SheetTitle>Issue not found</SheetTitle>
-          )}
-        </SheetHeader>
-
+    <div className="flex h-full flex-col border-l">
+      <div className="flex items-center justify-between border-b px-4 py-3">
         {fetching ? (
-          <div className="mt-6 space-y-4">
-            <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-24" />
+        ) : (
+          <span className="font-mono text-xs text-muted-foreground">{issue?.identifier}</span>
+        )}
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4">
+        {fetching ? (
+          <div className="space-y-4">
+            <Skeleton className="h-5 w-full" />
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-20 w-full" />
           </div>
         ) : issue ? (
-          <div className="mt-6 space-y-5">
+          <div className="space-y-5">
+            <h2 className="text-sm font-medium leading-snug">{issue.title}</h2>
+
             {/* Status & Priority */}
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -141,7 +134,7 @@ export function IssueDetailSheet({ issueId, onClose }: IssueDetailSheetProps) {
             {issue.description && (
               <div>
                 <p className="mb-1.5 text-xs text-muted-foreground">Description</p>
-                <div className="rounded-md border bg-secondary/30 p-3 text-sm whitespace-pre-wrap leading-relaxed">
+                <div className="max-h-64 overflow-y-auto rounded-md border bg-secondary/30 p-3 text-sm whitespace-pre-wrap leading-relaxed">
                   {issue.description}
                 </div>
               </div>
@@ -172,7 +165,7 @@ export function IssueDetailSheet({ issueId, onClose }: IssueDetailSheetProps) {
             )}
           </div>
         ) : null}
-      </SheetContent>
-    </Sheet>
+      </div>
+    </div>
   );
 }

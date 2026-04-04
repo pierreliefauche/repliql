@@ -47,7 +47,7 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
                       className="hover:bg-sidebar-accent/50"
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
-                      <item.icon className="mr-2 h-4 w-4" />
+                      <item.icon className="h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
@@ -62,10 +62,10 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
           variant="ghost"
           size="sm"
           onClick={onLogout}
-          className="w-full justify-start text-muted-foreground hover:text-foreground"
+          className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
         >
-          <SignOut className="mr-2 h-4 w-4" />
-          {!collapsed && <span>Disconnect</span>}
+          <SignOut className="h-4 w-4" />
+          {!collapsed && <span className="leading-none">Disconnect</span>}
         </Button>
       </SidebarFooter>
     </Sidebar>
