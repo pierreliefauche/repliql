@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test'
+
 import { greet, VERSION } from '../index'
 
 describe('RepliQL Core', () => {

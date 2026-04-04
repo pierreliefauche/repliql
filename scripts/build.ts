@@ -4,9 +4,10 @@
  * Orchestrates building all library packages and the playground
  */
 
-import { $ } from 'bun'
-import path from 'path'
 import fs from 'fs'
+import path from 'path'
+
+import { $ } from 'bun'
 
 const ROOT = import.meta.dir.replace('/scripts', '')
 const PACKAGES_DIR = path.join(ROOT, 'packages')
