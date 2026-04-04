@@ -1,7 +1,7 @@
 {
-  "name": "@repliql/playground",
+  "name": "@repliql/playground-linear",
   "version": "0.0.1",
-  "description": "Web application to test RepliQL packages",
+  "description": "Linear app playground using URQL GraphQL client",
   "type": "module",
   "scripts": {
     "dev": "bun --hot ./src/index.html",
@@ -11,9 +11,12 @@
     "fmt": "oxfmt --write src"
   },
   "dependencies": {
-    "@repliql/repliql": "workspace:*",
+    "@urql/core": "^5.1.1",
+    "graphql": "^16.11.0",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "react-router-dom": "^7.5.0",
+    "urql": "^4.3.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

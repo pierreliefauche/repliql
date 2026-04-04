@@ -5,13 +5,13 @@
   "workspaces": {
     "packages": [
       "./packages/*",
-      "./playground"
+      "./playgrounds/*"
     ],
     "catalog": {}
   },
   "type": "module",
   "scripts": {
-    "dev": "NODE_ENV=development bun run --filter @repliql/playground dev",
+    "dev": "NODE_ENV=development bun run --filter @repliql/playground-linear dev",
     "build": "bun run build:packages",
     "build:packages": "bun run --filter='./packages/*' build",
     "test": "bun test",
