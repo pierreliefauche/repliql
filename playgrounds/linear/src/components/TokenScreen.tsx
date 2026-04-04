@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Key } from 'lucide-react';
+import { Key } from '@phosphor-icons/react';
 
 interface TokenScreenProps {
   onSubmit: (token: string) => void;

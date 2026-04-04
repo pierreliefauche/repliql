@@ -1,4 +1,4 @@
-import { CircleDot, FolderKanban, LogOut } from 'lucide-react';
+import { Circle, Kanban, SignOut } from '@phosphor-icons/react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
 import {
@@ -16,8 +16,8 @@ import {
 import { Button } from '@/components/ui/button';
 
 const navItems = [
-  { title: 'Issues', url: '/', icon: CircleDot },
-  { title: 'Projects', url: '/projects', icon: FolderKanban },
+  { title: 'Issues', url: '/', icon: Circle },
+  { title: 'Projects', url: '/projects', icon: Kanban },
 ];
 
 interface AppSidebarProps {
@@ -64,7 +64,7 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
           onClick={onLogout}
           className="w-full justify-start text-muted-foreground hover:text-foreground"
         >
-          <LogOut className="mr-2 h-4 w-4" />
+          <SignOut className="mr-2 h-4 w-4" />
           {!collapsed && <span>Disconnect</span>}
         </Button>
       </SidebarFooter>

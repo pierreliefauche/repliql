@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
-import { ExternalLink } from 'lucide-react';
+import { ArrowSquareOut } from '@phosphor-icons/react';
 
 const priorityLabels: Record<number, string> = {
   0: 'No priority',
@@ -167,7 +167,7 @@ export function IssueDetailSheet({ issueId, onClose }: IssueDetailSheetProps) {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
               >
-                Open in Linear <ExternalLink className="h-3 w-3" />
+                Open in Linear <ArrowSquareOut className="h-3 w-3" />
               </a>
             )}
           </div>
