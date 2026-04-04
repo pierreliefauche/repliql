@@ -18,8 +18,8 @@ export function createLinearClient(token: string) {
   return createClient({
     url: LINEAR_API_URL,
     exchanges: [fetchExchange],
+    preferGetMethod: false,
     fetchOptions: () => ({
-      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: token,

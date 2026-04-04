@@ -7,7 +7,6 @@ import { IssuesView } from '@/components/IssuesView'
 import { ProjectsView } from '@/components/ProjectsView'
 import { TokenScreen } from '@/components/TokenScreen'
 import { Toaster as Sonner } from '@/components/ui/sonner'
-import { Toaster } from '@/components/ui/toaster'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createLinearClient, getApiToken, setApiToken, clearApiToken } from '@/lib/urql'
 
@@ -34,7 +33,6 @@ const App = () => {
   if (!client || !token) {
     return (
       <>
-        <Toaster />
         <Sonner />
         <TokenScreen onSubmit={handleConnect} />
       </>
@@ -44,7 +42,6 @@ const App = () => {
   return (
     <UrqlProvider value={client}>
       <TooltipProvider>
-        <Toaster />
         <Sonner />
         <BrowserRouter>
           <AppLayout onLogout={handleLogout}>
