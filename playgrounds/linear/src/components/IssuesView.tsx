@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { useQuery } from 'urql';
-import { ISSUES_QUERY } from '@/lib/queries';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
-import { IssueDetail } from '@/components/IssueDetail';
-import { DateTime } from 'luxon';
+import { DateTime } from 'luxon'
+import { useQuery } from 'urql'
+import { Link, Route, useLocation } from 'wouter'
+
+import { IssueDetail } from '@/components/IssueDetail'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ISSUES_QUERY } from '@/lib/queries'
 
 const priorityLabels: Record<number, string> = {
   0: 'No priority',
@@ -12,7 +13,7 @@ const priorityLabels: Record<number, string> = {
   2: 'High',
   3: 'Medium',
   4: 'Low',
-};
+}
 
 const priorityColors: Record<number, string> = {
   0: 'bg-muted text-muted-foreground',
@@ -20,21 +21,21 @@ const priorityColors: Record<number, string> = {
   2: 'bg-status-in-progress/20 text-status-in-progress',
   3: 'bg-primary/20 text-primary',
   4: 'bg-muted text-muted-foreground',
-};
+}
 
 export function IssuesView() {
-  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [, navigate] = useLocation()
   const [{ data, fetching, error }] = useQuery({
     query: ISSUES_QUERY,
     variables: { first: 50 },
-  });
+  })
 
   if (error) {
     return (
       <div className="flex items-center justify-center p-12 text-destructive">
         <p>Failed to load issues: {error.message}</p>
       </div>
-    );
+    )
   }
 
   return (
@@ -51,12 +52,14 @@ export function IssuesView() {
         ) : (
           <div className="divide-y divide-border rounded-lg border">
             {data?.issues?.nodes?.map((issue: any) => (
-              <div
+              <Link
                 key={issue.id}
-                className={`flex items-center gap-4 px-4 py-3 transition-colors hover:bg-secondary/50 cursor-pointer ${
-                  selectedIssueId === issue.id ? 'bg-secondary/50' : ''
-                }`}
-                onClick={() => setSelectedIssueId(issue.id)}
+                to={`/${issue.id}`}
+                className={active =>
+                  `flex items-center gap-4 px-4 py-3 transition-colors hover:bg-secondary/50 cursor-pointer ${
+                    active ? 'bg-secondary/50' : ''
+                  }`
+                }
               >
                 {issue.state && (
                   <div
@@ -93,17 +96,20 @@ export function IssuesView() {
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {DateTime.fromISO(issue.updatedAt).toRelative()}
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         )}
       </div>
 
       <div className="w-[32rem] shrink-0 overflow-hidden border-l">
-        {selectedIssueId && (
-          <IssueDetail issueId={selectedIssueId} onClose={() => setSelectedIssueId(null)} />
-        )}
+        <Route
+          path={'/:issueId'}
+          component={({ params }) => (
+            <IssueDetail issueId={params.issueId} onClose={() => navigate('/')} />
+          )}
+        />
       </div>
     </div>
-  );
+  )
 }

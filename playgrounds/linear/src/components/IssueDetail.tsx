@@ -1,9 +1,10 @@
-import { useQuery } from 'urql';
-import { ISSUE_DETAIL_QUERY } from '@/lib/queries';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { DateTime } from 'luxon';
-import { ArrowSquareOut, X } from '@phosphor-icons/react';
+import { ArrowSquareOutIcon, X } from '@phosphor-icons/react'
+import { DateTime } from 'luxon'
+import { useQuery } from 'urql'
+
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ISSUE_DETAIL_QUERY } from '@/lib/queries'
 
 const priorityLabels: Record<number, string> = {
   0: 'No priority',
@@ -11,7 +12,7 @@ const priorityLabels: Record<number, string> = {
   2: 'High',
   3: 'Medium',
   4: 'Low',
-};
+}
 
 const priorityColors: Record<number, string> = {
   0: 'bg-muted text-muted-foreground',
@@ -19,20 +20,20 @@ const priorityColors: Record<number, string> = {
   2: 'bg-status-in-progress/20 text-status-in-progress',
   3: 'bg-primary/20 text-primary',
   4: 'bg-muted text-muted-foreground',
-};
+}
 
 interface IssueDetailProps {
-  issueId: string;
-  onClose: () => void;
+  issueId: string
+  onClose: () => void
 }
 
 export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
   const [{ data, fetching }] = useQuery({
     query: ISSUE_DETAIL_QUERY,
     variables: { id: issueId },
-  });
+  })
 
-  const issue = data?.issue;
+  const issue = data?.issue
 
   return (
     <div className="flex h-full flex-col border-l">
@@ -72,7 +73,10 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
               </div>
               <div>
                 <p className="mb-1 text-xs text-muted-foreground">Priority</p>
-                <Badge variant="secondary" className={`text-xs ${priorityColors[issue.priority] || ''}`}>
+                <Badge
+                  variant="secondary"
+                  className={`text-xs ${priorityColors[issue.priority] || ''}`}
+                >
                   {priorityLabels[issue.priority] || 'Unknown'}
                 </Badge>
               </div>
@@ -84,7 +88,11 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
                 <p className="mb-1 text-xs text-muted-foreground">Assignee</p>
                 <div className="flex items-center gap-2">
                   {issue.assignee.avatarUrl ? (
-                    <img src={issue.assignee.avatarUrl} alt={issue.assignee.name} className="h-5 w-5 rounded-full" />
+                    <img
+                      src={issue.assignee.avatarUrl}
+                      alt={issue.assignee.name}
+                      className="h-5 w-5 rounded-full"
+                    />
                   ) : (
                     <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[10px] font-medium text-primary">
                       {issue.assignee.name?.[0]}
@@ -160,12 +168,12 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
               >
-                Open in Linear <ArrowSquareOut className="h-3 w-3" />
+                Open in Linear <ArrowSquareOutIcon className="h-3 w-3" />
               </a>
             )}
           </div>
         ) : null}
       </div>
     </div>
-  );
+  )
 }

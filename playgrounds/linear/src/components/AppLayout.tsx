@@ -1,25 +1,25 @@
-import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { AppSidebar } from '@/components/AppSidebar';
-import { Button } from '@/components/ui/button';
-import { Sun, Moon, Monitor } from '@phosphor-icons/react';
-import { useTheme } from '@/components/theme-provider';
+import { SunIcon, MoonIcon, MonitorIcon, type Icon } from '@phosphor-icons/react'
+
+import { AppSidebar } from '@/components/AppSidebar'
+import { useTheme, THEME_VALUES, type Theme } from '@/components/theme-provider'
+import { Button } from '@/components/ui/button'
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 
 interface AppLayoutProps {
-  children: React.ReactNode;
-  onLogout: () => void;
+  children: React.ReactNode
+  onLogout: () => void
 }
 
-const themes = ['light', 'dark', 'system'] as const;
-const themeIcons = { light: Sun, dark: Moon, system: Monitor };
+const themeIcons: Record<Theme, Icon> = { light: SunIcon, dark: MoonIcon, system: MonitorIcon }
 
 export function AppLayout({ children, onLogout }: AppLayoutProps) {
-  const { theme, setTheme } = useTheme();
-  const ThemeIcon = themeIcons[theme];
+  const { theme, setTheme } = useTheme()
+  const ThemeIcon = themeIcons[theme]
 
   const cycleTheme = () => {
-    const next = themes[(themes.indexOf(theme) + 1) % themes.length];
-    setTheme(next);
-  };
+    const next = THEME_VALUES[(THEME_VALUES.indexOf(theme) + 1) % THEME_VALUES.length]
+    setTheme(next)
+  }
 
   return (
     <SidebarProvider>
@@ -36,5 +36,5 @@ export function AppLayout({ children, onLogout }: AppLayoutProps) {
         </div>
       </div>
     </SidebarProvider>
-  );
+  )
 }

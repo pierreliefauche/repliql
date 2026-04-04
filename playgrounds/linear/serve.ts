@@ -8,6 +8,7 @@ serve({
   port: PORT,
   routes: {
     '/': homepage,
+    '/*': homepage,
   },
   // development can also be an object.
   development: {

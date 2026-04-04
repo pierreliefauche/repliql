@@ -1,21 +1,22 @@
-import { useQuery } from 'urql';
-import { PROJECTS_QUERY } from '@/lib/queries';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
+import { useQuery } from 'urql'
+
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { Skeleton } from '@/components/ui/skeleton'
+import { PROJECTS_QUERY } from '@/lib/queries'
 
 export function ProjectsView() {
   const [{ data, fetching, error }] = useQuery({
     query: PROJECTS_QUERY,
     variables: { first: 50 },
-  });
+  })
 
   if (error) {
     return (
       <div className="flex items-center justify-center p-12 text-destructive">
         <p>Failed to load projects: {error.message}</p>
       </div>
-    );
+    )
   }
 
   return (
@@ -82,5 +83,5 @@ export function ProjectsView() {
         </div>
       )}
     </div>
-  );
+  )
 }

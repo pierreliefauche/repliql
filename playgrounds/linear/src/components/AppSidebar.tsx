@@ -1,6 +1,7 @@
-import { Circle, Kanban, SignOut } from '@phosphor-icons/react';
-import { NavLink } from '@/components/NavLink';
-import { useLocation } from 'react-router-dom';
+import { CircleIcon, KanbanIcon, SignOutIcon } from '@phosphor-icons/react'
+import { Link, useLocation } from 'wouter'
+
+import { Button } from '@/components/ui/button'
 import {
   Sidebar,
   SidebarContent,
@@ -12,22 +13,22 @@ import {
   SidebarMenuItem,
   SidebarFooter,
   useSidebar,
-} from '@/components/ui/sidebar';
-import { Button } from '@/components/ui/button';
+} from '@/components/ui/sidebar'
+import { cn } from '@/lib/utils'
 
 const navItems = [
-  { title: 'Issues', url: '/', icon: Circle },
-  { title: 'Projects', url: '/projects', icon: Kanban },
-];
+  { title: 'Issues', url: '/issues', icon: CircleIcon },
+  { title: 'Projects', url: '/projects', icon: KanbanIcon },
+]
 
 interface AppSidebarProps {
-  onLogout: () => void;
+  onLogout: () => void
 }
 
 export function AppSidebar({ onLogout }: AppSidebarProps) {
-  const { state } = useSidebar();
-  const collapsed = state === 'collapsed';
-  const location = useLocation();
+  const { state } = useSidebar()
+  const [currentPath] = useLocation()
+  const collapsed = state === 'collapsed'
 
   return (
     <Sidebar collapsible="icon">
@@ -38,18 +39,20 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
+              {navItems.map(item => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink
+                    <Link
                       to={item.url}
-                      end
-                      className="hover:bg-sidebar-accent/50"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      className={cn(
+                        'hover:bg-sidebar-accent/50',
+                        currentPath.startsWith(item.url) &&
+                          'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
+                      )}
                     >
                       <item.icon className="h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -64,10 +67,10 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
           onClick={onLogout}
           className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
         >
-          <SignOut className="h-4 w-4" />
+          <SignOutIcon className="h-4 w-4" />
           {!collapsed && <span className="leading-none">Disconnect</span>}
         </Button>
       </SidebarFooter>
     </Sidebar>
-  );
+  )
 }
