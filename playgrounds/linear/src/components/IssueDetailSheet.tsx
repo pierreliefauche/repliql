@@ -3,7 +3,7 @@ import { ISSUE_DETAIL_QUERY } from '@/lib/queries';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatDistanceToNow } from 'date-fns';
+import { DateTime } from 'luxon';
 import { ArrowSquareOut } from '@phosphor-icons/react';
 
 const priorityLabels: Record<number, string> = {
@@ -151,11 +151,11 @@ export function IssueDetailSheet({ issueId, onClose }: IssueDetailSheetProps) {
             <div className="grid grid-cols-2 gap-4 border-t pt-4 text-xs text-muted-foreground">
               <div>
                 <p className="mb-0.5">Created</p>
-                <p>{formatDistanceToNow(new Date(issue.createdAt), { addSuffix: true })}</p>
+                <p>{DateTime.fromISO(issue.createdAt).toRelative()}</p>
               </div>
               <div>
                 <p className="mb-0.5">Updated</p>
-                <p>{formatDistanceToNow(new Date(issue.updatedAt), { addSuffix: true })}</p>
+                <p>{DateTime.fromISO(issue.updatedAt).toRelative()}</p>
               </div>
             </div>
 
