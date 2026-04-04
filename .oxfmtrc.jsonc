@@ -12,4 +12,18 @@
   "bracketSpacing": true, // Add spaces inside { } in object literals
   "singleAttributePerLine": false, // Allow multiple JSX attributes on one line
   "ignorePatterns": ["node_modules", "dist", ".git", ".env*", "*.min.js", "*.min.css", "coverage"],
+  "experimentalSortPackageJson": {
+    "sortScripts": true,
+  },
+  "experimentalSortImports": {
+    "groups": [
+      ["side_effect"],
+      ["builtin"],
+      ["external", "type-external"],
+      ["internal", "type-internal"],
+      ["parent", "type-parent"],
+      ["sibling", "type-sibling"],
+      ["index", "type-index"],
+    ],
+  },
 }
