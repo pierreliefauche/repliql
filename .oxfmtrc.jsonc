@@ -2,39 +2,14 @@
  * Oxfmt Configuration
  * Rust-based code formatter for JavaScript, TypeScript, JSX, and other languages
  * Docs: https://oxc.rs/docs/guide/formatter.html
- * Note: Official JSON schema not yet available - this file is validated by Oxfmt at runtime
  */
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  // Core formatting rules
-  "format": {
-    "indent_size": 2, // Use 2 spaces for indentation
-    "indent_type": "space", // Use spaces instead of tabs
-    "line_width": 100, // Maximum line length before wrapping
-    "quotes": "single", // Prefer single quotes ('') over double quotes
-    "semi": false, // Do not require semicolons at end of statements
-    "trailing_comma": "es5", // Add trailing commas in objects/arrays, not function parameters
-    "arrow_parens": "as-needed", // Only add parentheses to arrow functions when necessary
-    "bracket_spacing": true, // Add spaces inside { } in object literals
-    "jsx_single_attribute_per_line": false, // Allow multiple JSX attributes on one line
-    "tab_width": 2, // Tab character width for display
-  },
-
-  // Files and patterns to exclude from formatting
-  "ignore": {
-    "patterns": [
-      "node_modules", // Dependencies - pre-formatted
-      "dist", // Build output - pre-formatted
-      ".git", // Git directory
-      ".env*", // Environment files
-      "*.min.js", // Minified files
-      "*.min.css", // Minified stylesheets
-      "coverage", // Test coverage reports
-    ],
-  },
-
-  // Language-specific formatting options
-  "typescript": {
-    "type_annotation_spacing": true, // Add spaces around TypeScript type annotations
-  },
+  "printWidth": 100, // Maximum line length before wrapping
+  "singleQuote": true, // Prefer single quotes ('') over double quotes
+  "semi": false, // Do not require semicolons at end of statements
+  "arrowParens": "avoid", // Only add parentheses to arrow functions when necessary
+  "bracketSpacing": true, // Add spaces inside { } in object literals
+  "singleAttributePerLine": false, // Allow multiple JSX attributes on one line
+  "ignorePatterns": ["node_modules", "dist", ".git", ".env*", "*.min.js", "*.min.css", "coverage"],
 }

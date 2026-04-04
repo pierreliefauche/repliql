@@ -7,11 +7,11 @@
  * Placeholder export - will be expanded with actual cache implementation
  * @returns A greeting message
  */
-export function greet(name: string = "RepliQL"): string {
-  return `Hello from ${name}! 🚀`;
+export function greet(name: string = 'RepliQL'): string {
+  return `Hello from ${name}! 🚀`
 }
 
 /**
  * Version information
  */
-export const VERSION = "0.0.1";
+export const VERSION = '0.0.1'
