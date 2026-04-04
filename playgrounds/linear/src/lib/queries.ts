@@ -85,8 +85,52 @@ export const ISSUE_DETAIL_QUERY = gql`
         id
         name
       }
+      team {
+        id
+      }
       createdAt
       updatedAt
+    }
+  }
+`
+
+export const WORKFLOW_STATES_QUERY = gql`
+  query WorkflowStates($teamId: ID!) {
+    workflowStates(filter: { team: { id: { eq: $teamId } } }) {
+      nodes {
+        id
+        name
+        color
+        type
+      }
+    }
+  }
+`
+
+export const UPDATE_ISSUE_STATE_MUTATION = gql`
+  mutation UpdateIssueState($id: String!, $stateId: String!) {
+    issueUpdate(id: $id, input: { stateId: $stateId }) {
+      success
+      issue {
+        id
+        state {
+          id
+          name
+          color
+        }
+      }
+    }
+  }
+`
+
+export const UPDATE_ISSUE_PRIORITY_MUTATION = gql`
+  mutation UpdateIssuePriority($id: String!, $priority: Int!) {
+    issueUpdate(id: $id, input: { priority: $priority }) {
+      success
+      issue {
+        id
+        priority
+      }
     }
   }
 `

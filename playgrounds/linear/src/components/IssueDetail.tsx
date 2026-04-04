@@ -1,26 +1,12 @@
 import { ArrowSquareOutIcon, X } from '@phosphor-icons/react'
 import { DateTime } from 'luxon'
-import { useQuery } from 'urql'
+import { useQuery, useMutation } from 'urql'
 
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ISSUE_DETAIL_QUERY } from '@/lib/queries'
-
-const priorityLabels: Record<number, string> = {
-  0: 'No priority',
-  1: 'Urgent',
-  2: 'High',
-  3: 'Medium',
-  4: 'Low',
-}
-
-const priorityColors: Record<number, string> = {
-  0: 'bg-muted text-muted-foreground',
-  1: 'bg-destructive/20 text-destructive',
-  2: 'bg-status-in-progress/20 text-status-in-progress',
-  3: 'bg-primary/20 text-primary',
-  4: 'bg-muted text-muted-foreground',
-}
+import { ISSUE_DETAIL_QUERY, UPDATE_ISSUE_PRIORITY_MUTATION, UPDATE_ISSUE_STATE_MUTATION } from '@/lib/queries'
+import { PrioritySelect } from '@/components/PrioritySelect'
+import { StatusSelect } from '@/components/StatusSelect'
 
 interface IssueDetailProps {
   issueId: string
@@ -32,6 +18,8 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
     query: ISSUE_DETAIL_QUERY,
     variables: { id: issueId },
   })
+  const [, updatePriority] = useMutation(UPDATE_ISSUE_PRIORITY_MUTATION)
+  const [, updateState] = useMutation(UPDATE_ISSUE_STATE_MUTATION)
 
   const issue = data?.issue
 
@@ -63,22 +51,20 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="mb-1 text-xs text-muted-foreground">Status</p>
-                <div className="flex items-center gap-2">
-                  <div
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: issue.state?.color }}
+                {issue.state && issue.team && (
+                  <StatusSelect
+                    teamId={issue.team.id}
+                    state={issue.state}
+                    onChange={(stateId) => updateState({ id: issue.id, stateId })}
                   />
-                  <span className="text-sm">{issue.state?.name}</span>
-                </div>
+                )}
               </div>
               <div>
                 <p className="mb-1 text-xs text-muted-foreground">Priority</p>
-                <Badge
-                  variant="secondary"
-                  className={`text-xs ${priorityColors[issue.priority] || ''}`}
-                >
-                  {priorityLabels[issue.priority] || 'Unknown'}
-                </Badge>
+                <PrioritySelect
+                  priority={issue.priority}
+                  onChange={(priority) => updatePriority({ id: issue.id, priority })}
+                />
               </div>
             </div>
 

@@ -3,25 +3,10 @@ import { useQuery } from 'urql'
 import { Link, Route, useLocation } from 'wouter'
 
 import { IssueDetail } from '@/components/IssueDetail'
-import { Badge } from '@/components/ui/badge'
+import { PriorityBadge } from '@/components/PriorityBadge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ISSUES_QUERY } from '@/lib/queries'
 
-const priorityLabels: Record<number, string> = {
-  0: 'No priority',
-  1: 'Urgent',
-  2: 'High',
-  3: 'Medium',
-  4: 'Low',
-}
-
-const priorityColors: Record<number, string> = {
-  0: 'bg-muted text-muted-foreground',
-  1: 'bg-destructive/20 text-destructive',
-  2: 'bg-status-in-progress/20 text-status-in-progress',
-  3: 'bg-primary/20 text-primary',
-  4: 'bg-muted text-muted-foreground',
-}
 
 export function IssuesView() {
   const [, navigate] = useLocation()
@@ -72,12 +57,7 @@ export function IssuesView() {
                   {issue.identifier}
                 </span>
                 <span className="flex-1 truncate text-sm">{issue.title}</span>
-                <Badge
-                  variant="secondary"
-                  className={`text-xs ${priorityColors[issue.priority] || ''}`}
-                >
-                  {priorityLabels[issue.priority] || 'Unknown'}
-                </Badge>
+                <PriorityBadge priority={issue.priority} />
                 {issue.assignee && (
                   <div className="flex items-center gap-1.5">
                     {issue.assignee.avatarUrl ? (
