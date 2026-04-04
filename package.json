@@ -18,7 +18,7 @@
     "test:watch": "bun test --watch",
     "lint": "oxlint .",
     "fmt": "oxfmt --write .",
-    "fmt:check": "oxfmt --check ."
+    "fmt:check": "oxfmt -c ./.oxfmtrc.jsonc --check ."
   },
   "devDependencies": {
     "@types/bun": "latest",

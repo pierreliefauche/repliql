@@ -34,10 +34,6 @@
   },
 
   // Language-specific formatting options
-  "javascript": {
-    "type_annotation_spacing": true, // Add spaces around type annotations in comments
-  },
-
   "typescript": {
     "type_annotation_spacing": true, // Add spaces around TypeScript type annotations
   },
