@@ -28,7 +28,14 @@ export const client = new Client({
   },
 });
 
+/**
+ * Set the Linear API key in localStorage.
+ * NOTE: localStorage is used for this playground/demo app as it runs entirely
+ * client-side. For production apps, consider using secure HTTP-only cookies
+ * or a backend proxy to avoid exposing API keys in the browser.
+ */
 export function setApiKey(key: string): void {
+  // nosemgrep: javascript.browser.security.insecure-localstorage.insecure-localstorage
   localStorage.setItem("linear_api_key", key);
 }
 
