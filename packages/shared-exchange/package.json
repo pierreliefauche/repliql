@@ -1,0 +1,33 @@
+{
+  "name": "@repliql/shared-exchange",
+  "version": "0.0.1",
+  "description": "",
+  "keywords": [
+    "urql"
+  ],
+  "license": "MIT",
+  "author": "RepliQL Contributors",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run build:ts && bun run build:types",
+    "build:ts": "bun build ./src/index.ts --outdir ./dist --format esm --minify",
+    "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap",
+    "dev": "bun build ./src/index.ts --watch --outdir ./dist --format esm",
+    "fmt": "oxfmt --write src",
+    "lint": "oxlint src",
+    "test": "bun test src/**/*.test.ts",
+    "test:watch": "bun test src/**/*.test.ts --watch"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.0"
+  }
+}
