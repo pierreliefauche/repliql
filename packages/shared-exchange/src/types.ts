@@ -1,4 +1,10 @@
-import type { AnyVariables, Operation, OperationType, RequestPolicy } from '@urql/core'
+import type { AnyVariables, Operation, OperationContext, OperationType } from '@urql/core'
+
+type NoFunction<T> = T extends Function ? undefined : T
+
+export type SerializedContext = Partial<{
+  [K in keyof OperationContext]: NoFunction<OperationContext[K]>
+}>
 
 export interface SerializedOperation {
   key: number
@@ -6,8 +12,8 @@ export interface SerializedOperation {
   /** The GraphQL document AST — same type as Operation['query'], structured-clone-able. */
   query: Operation['query']
   variables?: AnyVariables
-  url: string
-  requestPolicy: RequestPolicy
+  extensions?: Record<string, unknown>
+  context: SerializedContext
 }
 
 export interface SerializedError {

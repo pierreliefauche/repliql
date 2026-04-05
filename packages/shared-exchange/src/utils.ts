@@ -7,32 +7,32 @@ export function generateId(): string {
   return crypto.randomUUID()
 }
 
+/**
+ * Serializes an Operation for transmission over a MessagePort.
+ * Preserves all structured-clone-able context fields; drops functions.
+ */
 export function serializeOp(op: Operation): SerializedOperation {
   return {
     key: op.key,
     kind: op.kind,
     query: op.query,
     variables: op.variables,
-    url: op.context.url,
-    requestPolicy: op.context.requestPolicy,
+    extensions: op.extensions,
+    context: JSON.parse(JSON.stringify(op.context)),
   }
 }
 
 /**
- * Reconstructs a minimal Operation from its serialized wire form.
- * The context only contains fields that were sent over the wire; non-serializable
- * fields (fetch, fetchOptions as a function, etc.) are omitted.
+ * Reconstructs an Operation from its serialized wire form.
+ *
+ * If an original operation is provided, non-serializable context fields (fetch, fetchOptions, etc.)
+ * are re-hydrated from it while preserving any modifications the hub may have made to serializable
+ * fields like variables, extensions, or context values.
  */
-export function deserializeOp(serialized: SerializedOperation): Operation {
+export function deserializeOp(serialized: SerializedOperation, originalOp?: Operation): Operation {
   return {
-    key: serialized.key,
-    kind: serialized.kind,
-    query: serialized.query,
-    variables: serialized.variables,
-    context: {
-      url: serialized.url,
-      requestPolicy: serialized.requestPolicy,
-    },
+    ...serialized,
+    context: { ...originalOp?.context, ...serialized.context },
   } as unknown as Operation
 }
 

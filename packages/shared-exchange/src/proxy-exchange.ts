@@ -81,14 +81,22 @@ export function proxySharedExchange(config: ProxySharedExchangeConfig): Exchange
             },
 
             onForward(serialized: SerializedOperation): void {
+              // Re-hydrate with non-serializable context from the original operation.
+              // This preserves functions like fetch, fetchOptions while respecting any
+              // modifications the hub made to serializable fields.
+              const originalOp = pendingOps.get(serialized.key)
+              const op = deserializeOp(serialized, originalOp)
+
               // Push the operation (including teardowns) through the single forward stream.
               // This complies with URQL's requirement that forward() is called only once.
-              forwardedOps.next(deserializeOp(serialized))
+              forwardedOps.next(op)
             },
 
             onReexecute(serialized: SerializedOperation): void {
-              // Hub's exchange asked us to reexecute through our own URQL client
-              client.reexecuteOperation(deserializeOp(serialized))
+              // Re-hydrate with non-serializable context from the original operation.
+              const originalOp = pendingOps.get(serialized.key)
+              const op = deserializeOp(serialized, originalOp)
+              client.reexecuteOperation(op)
             },
           }),
         ) as Promise<void>

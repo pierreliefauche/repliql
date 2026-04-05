@@ -186,8 +186,7 @@ describe('proxySharedExchange', () => {
       key: query.key,
       kind: 'query',
       query: testDoc,
-      url: testCtx.url,
-      requestPolicy: testCtx.requestPolicy,
+      context: { url: testCtx.url, requestPolicy: testCtx.requestPolicy },
     })
 
     expect(forwardedOps).toHaveLength(1)
@@ -204,6 +203,57 @@ describe('proxySharedExchange', () => {
     await flush()
     expect(mock.forwardedResults).toHaveLength(1)
     expect(mock.forwardedResults[0]?.result.data).toEqual({ value: 7 })
+  })
+
+  it('re-hydrates forwarded ops with functions while preserving hub modifications', async () => {
+    const mock = makeMockHub()
+    const forwardedOps: Operation[] = []
+
+    const testForward = (ops$: Source<Operation>): Source<OperationResult> => {
+      pipe(
+        ops$,
+        subscribe(op => forwardedOps.push(op)),
+      )
+      return makeSubject<OperationResult>().source
+    }
+
+    const { opsSubject } = setupExchange(mock, testForward)
+
+    // Create an operation with a custom fetch function and other context
+    const customFetch = (() => Promise.resolve(new Response())) as unknown as typeof fetch
+    const opWithFetch = makeOperation(
+      'query',
+      createRequest(testDoc, { originalVar: 'original' }),
+      { ...testCtx, fetch: customFetch, originalContextValue: 'fromSpoke' },
+    )
+    opsSubject.next(opWithFetch)
+    await flush()
+
+    // Hub asks us to forward with MODIFIED variables/extensions/context
+    mock.storedCallbacks?.onForward({
+      key: opWithFetch.key,
+      kind: 'query',
+      query: testDoc,
+      variables: { hubModifiedVar: 'fromHub' }, // Hub changed variables
+      extensions: { addedByHub: true }, // Hub added extensions
+      context: {
+        url: testCtx.url,
+        requestPolicy: 'network-only', // Hub changed requestPolicy
+        hubAddedContext: 'newValue', // Hub added new context
+      },
+    })
+
+    expect(forwardedOps).toHaveLength(1)
+    const forwarded = forwardedOps[0]!
+
+    // Non-serializable fields are re-hydrated from original
+    expect(forwarded.context.fetch).toBe(customFetch)
+
+    // Hub modifications to serializable fields are preserved
+    expect(forwarded.variables).toEqual({ hubModifiedVar: 'fromHub' })
+    expect(forwarded.extensions).toEqual({ addedByHub: true })
+    expect(forwarded.context.requestPolicy).toBe('network-only')
+    expect(forwarded.context.hubAddedContext).toBe('newValue')
   })
 
   it('calls client.reexecuteOperation when hub calls onReexecute', async () => {
@@ -234,8 +284,7 @@ describe('proxySharedExchange', () => {
       key: query.key,
       kind: 'query',
       query: testDoc,
-      url: testCtx.url,
-      requestPolicy: testCtx.requestPolicy,
+      context: { url: testCtx.url, requestPolicy: testCtx.requestPolicy },
     })
 
     expect(reexecuted).toHaveLength(1)
@@ -265,8 +314,7 @@ describe('proxySharedExchange', () => {
       key: query.key,
       kind: 'teardown',
       query: testDoc,
-      url: testCtx.url,
-      requestPolicy: testCtx.requestPolicy,
+      context: { url: testCtx.url, requestPolicy: testCtx.requestPolicy },
     })
 
     // Teardown the operation
