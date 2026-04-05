@@ -186,6 +186,7 @@ describe('proxySharedExchange', () => {
       key: query.key,
       kind: 'query',
       query: testDoc,
+      variables: {},
       context: { url: testCtx.url, requestPolicy: testCtx.requestPolicy },
     })
 
@@ -284,6 +285,7 @@ describe('proxySharedExchange', () => {
       key: query.key,
       kind: 'query',
       query: testDoc,
+      variables: {},
       context: { url: testCtx.url, requestPolicy: testCtx.requestPolicy },
     })
 
@@ -314,6 +316,7 @@ describe('proxySharedExchange', () => {
       key: query.key,
       kind: 'teardown',
       query: testDoc,
+      variables: {},
       context: { url: testCtx.url, requestPolicy: testCtx.requestPolicy },
     })
 

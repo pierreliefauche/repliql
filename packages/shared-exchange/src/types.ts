@@ -1,4 +1,4 @@
-import type { AnyVariables, Operation, OperationContext, OperationType } from '@urql/core'
+import type { Operation, OperationContext, OperationResult } from '@urql/core'
 
 type NoFunction<T> = T extends Function ? undefined : T
 
@@ -6,13 +6,7 @@ export type SerializedContext = Partial<{
   [K in keyof OperationContext]: NoFunction<OperationContext[K]>
 }>
 
-export interface SerializedOperation {
-  key: number
-  kind: OperationType
-  /** The GraphQL document AST — same type as Operation['query'], structured-clone-able. */
-  query: Operation['query']
-  variables?: AnyVariables
-  extensions?: Record<string, unknown>
+export type SerializedOperation = Omit<Operation, 'context'> & {
   context: SerializedContext
 }
 
@@ -22,12 +16,9 @@ export interface SerializedError {
   networkError?: { message: string }
 }
 
-export interface SerializedResult {
-  key: number
-  data?: unknown
+export type SerializedResult = Omit<OperationResult, 'error' | 'operation'> & {
+  key: Operation['key']
   error?: SerializedError
-  stale: boolean
-  hasNext: boolean
 }
 
 /**
