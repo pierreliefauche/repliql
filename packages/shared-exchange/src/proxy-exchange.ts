@@ -3,11 +3,15 @@ import type { Remote } from 'comlink'
 import { proxy, wrap } from 'comlink'
 import { empty, makeSubject, mergeMap, pipe, subscribe } from 'wonka'
 
+import { heartbeat as navigatorHeartbeat } from './heartbeat'
 import type { SharedService } from './shared-service'
-import type { EndpointConfig, SerializedOperation, SerializedResult } from './types'
+import type { EndpointConfig, Heartbeat, SerializedOperation, SerializedResult } from './types'
 import { deserializeOp, deserializeResult, generateId, serializeOp, serializeResult } from './utils'
 
-type ProxySharedExchangeConfig = { sharedService: Remote<SharedService> } | EndpointConfig
+type ProxySharedExchangeConfig = { heartbeat?: Heartbeat } & (
+  | { sharedService: Remote<SharedService> }
+  | EndpointConfig
+)
 
 /**
  * Creates a Comlink proxy to the hub SharedService from a raw MessagePort.
@@ -33,8 +37,14 @@ export function proxySharedService<T extends SharedService = SharedService>(
  * - `{ endpoint: worker.port }` — wraps the port in a Comlink proxy automatically
  * - `{ sharedService }` — reuses an existing proxy (e.g. from proxySharedService)
  */
-export function proxySharedExchange(config: ProxySharedExchangeConfig): Exchange {
+export function proxySharedExchange({
+  heartbeat: _heartbeat,
+  ...config
+}: ProxySharedExchangeConfig): Exchange {
   return ({ client, forward }) => {
+    // Default to browser heartbeat
+    const heartbeat = _heartbeat || navigatorHeartbeat
+
     const hub: Remote<SharedService> =
       'sharedService' in config ? config.sharedService : wrap(config.endpoint)
 
@@ -58,7 +68,7 @@ export function proxySharedExchange(config: ProxySharedExchangeConfig): Exchange
     // operations don't open multiple connections.
     let connectionPromise: Promise<void> | null = null
 
-    const ensureConnected = (): Promise<void> => {
+    const ensureConnected = async () => {
       if (!connectionPromise) {
         // Set up the forward pipeline BEFORE connecting to the hub.
         // This ensures we're ready to receive forwarded operations as soon as onForward is called.
@@ -70,6 +80,8 @@ export function proxySharedExchange(config: ProxySharedExchangeConfig): Exchange
             void hub.resolveForwarded(spokeId, result.operation.key, serializeResult(result))
           }),
         )
+
+        await heartbeat.start(spokeId)
 
         connectionPromise = hub.connect(
           spokeId,

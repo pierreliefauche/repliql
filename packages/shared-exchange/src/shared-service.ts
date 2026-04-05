@@ -1,11 +1,13 @@
 import type { Client, Exchange, ExchangeIO, Operation, OperationResult } from '@urql/core'
 import { makeSubject, pipe, subscribe } from 'wonka'
 
-import type { SerializedOperation, SerializedResult, SpokeCallbacks } from './types'
+import { heartbeat as navigatorHeartbeat } from './heartbeat'
+import type { Heartbeat, SerializedOperation, SerializedResult, SpokeCallbacks } from './types'
 import { deserializeOp, deserializeResult, serializeOp, serializeResult } from './utils'
 
-interface SharedServiceOptions {
+export interface SharedServiceConfig {
   exchange: Exchange
+  heartbeat?: Heartbeat
 }
 
 interface SpokeState {
@@ -15,6 +17,8 @@ interface SpokeState {
 }
 
 export class SharedService {
+  private readonly heartbeat: Heartbeat
+
   /** The wrapped exchange. Assignable to allow hot-swapping (re-execution semantics: TODO). */
   exchange: Exchange
 
@@ -38,7 +42,8 @@ export class SharedService {
   private readonly operationSubject: ReturnType<typeof makeSubject<Operation>>
   private readonly fakeClient: Client
 
-  constructor({ exchange }: SharedServiceOptions) {
+  constructor({ exchange, heartbeat: _heartbeat }: SharedServiceConfig) {
+    this.heartbeat = _heartbeat || navigatorHeartbeat
     this.exchange = exchange
     this.spokes = new Map()
     this.operationSubscribers = new Map()
@@ -55,6 +60,11 @@ export class SharedService {
   /** Register a new spoke connection. Called by the spoke via Comlink. */
   connect(spokeId: string, callbacks: SpokeCallbacks): void {
     this.spokes.set(spokeId, { callbacks, ops: new Set() })
+
+    // Detect disconnection
+    this.heartbeat.onStop(spokeId, () => {
+      this.disconnect(spokeId)
+    })
   }
 
   /** Unregister a spoke, tearing down all its active operations. */

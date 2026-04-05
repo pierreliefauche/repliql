@@ -19,6 +19,12 @@ import type { SerializedOperation, SerializedResult, SpokeCallbacks } from './ty
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
+// Mock heartbeat, never stop beating
+const mockHeartbeat = {
+  start: () => Promise.resolve(),
+  onStop: () => {},
+}
+
 const testDoc = gql`
   query TestQuery {
     value
@@ -32,8 +38,7 @@ function makeTestOp(kind: 'query' | 'mutation' | 'subscription' = 'query'): Oper
 
 /** Flush pending microtasks (enough for 2-level promise chains). */
 async function flush(): Promise<void> {
-  await Promise.resolve()
-  await Promise.resolve()
+  await new Promise(r => setTimeout(r, 1))
 }
 
 interface MockHub {
@@ -86,7 +91,10 @@ function setupExchange(
   opsSubject: ReturnType<typeof makeSubject<Operation>>
   results: OperationResult[]
 } {
-  const exchange: Exchange = proxySharedExchange({ sharedService: mockHub.hub })
+  const exchange: Exchange = proxySharedExchange({
+    sharedService: mockHub.hub,
+    heartbeat: mockHeartbeat,
+  })
 
   const fakeClient = {
     reexecuteOperation: () => {},
@@ -265,7 +273,10 @@ describe('proxySharedExchange', () => {
       reexecuteOperation: (op: Operation) => reexecuted.push(op),
     } as unknown as Client
 
-    const exchange: Exchange = proxySharedExchange({ sharedService: mock.hub })
+    const exchange: Exchange = proxySharedExchange({
+      sharedService: mock.hub,
+      heartbeat: mockHeartbeat,
+    })
     const opsSubject = makeSubject<Operation>()
     // Must subscribe to the result source to activate the Wonka pipeline
     pipe(

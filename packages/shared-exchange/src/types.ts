@@ -35,4 +35,9 @@ export interface SpokeCallbacks {
 }
 
 /** Config type for functions that accept a raw MessagePort endpoint. */
-export type EndpointConfig = { endpoint: MessagePort }
+export type EndpointConfig = { endpoint: MessagePort; heartbeat?: Heartbeat }
+
+export type Heartbeat = {
+  start: (id: string) => Promise<void>
+  onStop: (id: string, callback: () => void) => void
+}

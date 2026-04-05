@@ -11,11 +11,26 @@ import {
 } from '@urql/core'
 import { makeSubject, pipe, subscribe } from 'wonka'
 
-import { SharedService } from './shared-service'
+import { SharedService as _SharedService, SharedServiceConfig } from './shared-service'
 import type { SerializedOperation, SerializedResult, SpokeCallbacks } from './types'
 import { serializeOp } from './utils'
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
+
+// Mock heartbeat, never stop beating
+const mockHeartbeat = {
+  start: () => Promise.resolve(),
+  onStop: () => {},
+}
+
+class SharedService extends _SharedService {
+  constructor(config: SharedServiceConfig) {
+    super({
+      heartbeat: mockHeartbeat,
+      ...config,
+    })
+  }
+}
 
 const testDoc = gql`
   query TestQuery {

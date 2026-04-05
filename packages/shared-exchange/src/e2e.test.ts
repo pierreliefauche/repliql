@@ -16,8 +16,23 @@ import { delay, filter, makeSubject, map, pipe, subscribe } from 'wonka'
 import type { Source } from 'wonka'
 
 import { proxySharedExchange } from './proxy-exchange'
-import { SharedService } from './shared-service'
+import { SharedService as _SharedService, SharedServiceConfig } from './shared-service'
 import type { SpokeCallbacks } from './types'
+
+// Mock heartbeat, never stop beating
+const mockHeartbeat = {
+  start: () => Promise.resolve(),
+  onStop: () => {},
+}
+
+class SharedService extends _SharedService {
+  constructor(config: SharedServiceConfig) {
+    super({
+      heartbeat: mockHeartbeat,
+      ...config,
+    })
+  }
+}
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -34,13 +49,8 @@ function makeTestOp(kind: 'query' | 'mutation' | 'subscription' = 'query'): Oper
 }
 
 /** Flush 2 levels of microtasks (enough for the connect → executeOperation promise chain). */
-async function flush(delay?: number): Promise<void> {
-  if (delay) {
-    await new Promise(resolve => setTimeout(resolve, delay))
-  } else {
-    await Promise.resolve()
-    await Promise.resolve()
-  }
+async function flush(delay: number = 1): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, delay))
 }
 
 /**
@@ -90,7 +100,7 @@ function setupSpoke(
   forwardFn: ExchangeIO = mockFetch,
 ): { opsSubject: ReturnType<typeof makeSubject<Operation>>; results: OperationResult[] } {
   const fakeClient = { reexecuteOperation: () => {} } as unknown as Client
-  const exchange = proxySharedExchange({ sharedService: hub })
+  const exchange = proxySharedExchange({ sharedService: hub, heartbeat: mockHeartbeat })
   const opsSubject = makeSubject<Operation>()
   const results: OperationResult[] = []
 
@@ -575,7 +585,7 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
     return createClient({
       url: 'http://test.example/graphql',
       exchanges: [
-        proxySharedExchange({ sharedService: hub }),
+        proxySharedExchange({ sharedService: hub, heartbeat: mockHeartbeat }),
         createMockFetchExchange(fetchOptions),
       ],
     })
@@ -684,7 +694,10 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
 
     const client = createClient({
       url: 'http://test.example/graphql',
-      exchanges: [proxySharedExchange({ sharedService: hub }), trackingFetchExchange],
+      exchanges: [
+        proxySharedExchange({ sharedService: hub, heartbeat: mockHeartbeat }),
+        trackingFetchExchange,
+      ],
     })
 
     const results: OperationResult[] = []
@@ -847,7 +860,10 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
 
     const client = createClient({
       url: 'http://test.example/graphql',
-      exchanges: [proxySharedExchange({ sharedService: hub }), streamingFetchExchange],
+      exchanges: [
+        proxySharedExchange({ sharedService: hub, heartbeat: mockHeartbeat }),
+        streamingFetchExchange,
+      ],
     })
 
     const results: OperationResult[] = []
