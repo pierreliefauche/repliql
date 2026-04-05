@@ -1,7 +1,7 @@
 import type { Exchange, Operation, OperationResult } from '@urql/core'
 import type { Remote } from 'comlink'
 import { proxy, wrap } from 'comlink'
-import { empty, fromValue, makeSubject, mergeMap, pipe, publish, subscribe } from 'wonka'
+import { empty, makeSubject, mergeMap, pipe, subscribe } from 'wonka'
 
 import type { SharedService } from './shared-service'
 import type { EndpointConfig, SerializedOperation, SerializedResult } from './types'
@@ -35,7 +35,6 @@ export function proxySharedService<T extends SharedService = SharedService>(
  */
 export function proxySharedExchange(config: ProxySharedExchangeConfig): Exchange {
   return ({ client, forward }) => {
-    // Prefer an already-created proxy; only wrap the raw port if no proxy is provided.
     const hub: Remote<SharedService> =
       'sharedService' in config ? config.sharedService : wrap(config.endpoint)
 
@@ -50,9 +49,10 @@ export function proxySharedExchange(config: ProxySharedExchangeConfig): Exchange
     // Maps operation key → original Operation (for result reconstruction).
     const pendingOps = new Map<number, Operation>()
 
-    // Maps operation key → unsubscribe for an active forward subscription.
-    // (The hub asked this spoke's downstream to execute an operation.)
-    const forwardSubs = new Map<number, () => void>()
+    // Subject for operations the hub asks us to forward to downstream exchanges.
+    // Using a subject allows us to call forward() exactly once (at setup time),
+    // then push operations into it as they arrive from the hub.
+    const forwardedOps = makeSubject<Operation>()
 
     // Lazily established on the first operation — stored as a promise so concurrent
     // operations don't open multiple connections.
@@ -60,6 +60,17 @@ export function proxySharedExchange(config: ProxySharedExchangeConfig): Exchange
 
     const ensureConnected = (): Promise<void> => {
       if (!connectionPromise) {
+        // Set up the forward pipeline BEFORE connecting to the hub.
+        // This ensures we're ready to receive forwarded operations as soon as onForward is called.
+        // Results from forwarded ops are sent back to the hub.
+        pipe(
+          forwardedOps.source,
+          forward,
+          subscribe((result: OperationResult) => {
+            void hub.resolveForwarded(spokeId, result.operation.key, serializeResult(result))
+          }),
+        )
+
         connectionPromise = hub.connect(
           spokeId,
           proxy({
@@ -70,28 +81,9 @@ export function proxySharedExchange(config: ProxySharedExchangeConfig): Exchange
             },
 
             onForward(serialized: SerializedOperation): void {
-              if (serialized.kind === 'teardown') {
-                // Hub is signalling us to teardown our downstream subscription for this key
-                forwardSubs.get(serialized.key)?.()
-                forwardSubs.delete(serialized.key)
-                // Push the teardown through forward so downstream exchanges can process it
-                // The subscription completes immediately but we explicitly unsubscribe for safety
-                const teardownOp = deserializeOp(serialized)
-                pipe(fromValue(teardownOp), forward, publish)
-                return
-              }
-
-              const op = deserializeOp(serialized)
-              // Clean up any existing forward subscription for this key before starting a new one
-              forwardSubs.get(serialized.key)?.()
-              const subscription = pipe(
-                fromValue(op),
-                forward,
-                subscribe((result: OperationResult) => {
-                  void hub.resolveForwarded(spokeId, serialized.key, serializeResult(result))
-                }),
-              )
-              forwardSubs.set(serialized.key, () => subscription.unsubscribe())
+              // Push the operation (including teardowns) through the single forward stream.
+              // This complies with URQL's requirement that forward() is called only once.
+              forwardedOps.next(deserializeOp(serialized))
             },
 
             onReexecute(serialized: SerializedOperation): void {
@@ -113,8 +105,6 @@ export function proxySharedExchange(config: ProxySharedExchangeConfig): Exchange
             resultSubjects.get(op.key)?.complete()
             resultSubjects.delete(op.key)
             pendingOps.delete(op.key)
-            forwardSubs.get(op.key)?.()
-            forwardSubs.delete(op.key)
             void ensureConnected().then(() => hub.teardownOperation(spokeId, op.key))
             return empty
           }
