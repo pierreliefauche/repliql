@@ -18,40 +18,88 @@ Uses [Comlink](https://www.npmjs.com/package/comlink) for inter-process communic
 - Operations are forwarded to their origin spoke in priority
 - Subscriptions are de-duplicated (2 spokes requesting the same subscription will not trigger 2 subscriptions down the chain)
 
-## Usage
+## Examples
 
-### Browsers
-
-**main.js**
-
-```ts
-import { createClient } from 'urql'
-import { proxySharedExchange } from '@repliql/shared-exchange'
-
-const worker = new SharedWorker('worker.js')
-
-const sharedExchange = proxySharedExchange({
-  endpoint: worker.port,
-})
-
-const urqlClient = createClient({
-    url: '...',
-    exchanges: [
-      ...,
-      sharedExchange,
-      ...,
-    ],
-  })
-
-```
+### Share a graphcache instance
 
 **worker.js**
 
 ```ts
 import { cacheExchange } from '@urql/exchange-graphcache'
-import { exposeSharedExchange } from '@repliql/shared-exchange'
+import { exposeSharedService, SharedService } from '@repliql/shared-exchange'
 
-const sharedExchange = cacheExchange({})
+const sharedService = new SharedService({
+  exchange: cacheExchange({}),
+})
 
-exposeSharedExchange(sharedExchange)
+exposeSharedService(sharedService)
+```
+
+**main.js**
+
+```ts
+import { createClient, fetchExchange } from 'urql'
+import { proxySharedExchange } from '@repliql/shared-exchange'
+
+const worker = new SharedWorker('worker.js')
+
+// Short syntax: accepts `proxySharedService` config directly
+const sharedCacheExchange = proxySharedExchange({
+  endpoint: worker.port,
+})
+
+const urqlClient = createClient({
+  url: 'https://api.app/graphql',
+  exchanges: [sharedCacheExchange, fetchExchange],
+})
+```
+
+### Reset shared cache
+
+**worker.js**
+
+```ts
+import { cacheExchange } from '@urql/exchange-graphcache'
+import { exposeSharedService, SharedService } from '@repliql/shared-exchange'
+
+function initCacheExchange() {
+  return cacheExchange({})
+}
+
+// Extend SharedService class to expose more functions to spokes
+class MySharedService extends SharedService {
+  resetCache() {
+    this.exchange = initCacheExchange()
+  }
+}
+
+const sharedService = new MySharedService({
+  exchange: initCacheExchange(),
+})
+
+exposeSharedService(sharedService)
+```
+
+**main.js**
+
+```ts
+import { createClient, fetchExchange } from 'urql'
+import { proxySharedExchange, proxySharedService } from '@repliql/shared-exchange'
+
+const worker = new SharedWorker('worker.js')
+
+const sharedService = proxySharedService({ endpoint: worker.port })
+
+const urqlClient = createClient({
+  url: 'https://api.app/graphql',
+  exchanges: [
+    proxySharedExchange({
+      sharedService,
+    }),
+    fetchExchange,
+  ],
+})
+
+// When user logs out
+sharedService.resetCache()
 ```
