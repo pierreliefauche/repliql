@@ -1,0 +1,39 @@
+{
+  "name": "@repliql/kysely-dissect-query",
+  "version": "0.0.1",
+  "description": "",
+  "keywords": [
+    "kysely"
+  ],
+  "license": "MIT",
+  "author": "RepliQL Contributors",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "bun run build:esm && bun run build:cjs && bun run build:types",
+    "build:cjs": "bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify",
+    "build:esm": "bun build ./src/index.ts --outfile ./dist/index.mjs --format esm --minify",
+    "build:types": "tsc -p tsconfig.build.json",
+    "dev": "bun build ./src/index.ts --watch --outdir ./dist --format esm",
+    "fmt": "oxfmt --write src",
+    "lint": "oxlint src",
+    "test": "bun test ./src/**/*.test.ts ./src/*.test.ts",
+    "test:watch": "bun test ./src/**/*.test.ts ./src/*.test.ts --watch"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "peerDependencies": {
+    "kysely": "^0.28.16"
+  }
+}
