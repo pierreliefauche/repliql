@@ -27,27 +27,31 @@ export type DissectedColumn = {
   unknownOperator?: boolean
 }
 
-export type DissectedTable = {
+export type DissectedTable<TableSchema = any> = {
   unidentifiedColumn?: boolean
   columns: {
+    [K in keyof TableSchema]?: DissectedColumn
+  } & {
     [columnName: string]: DissectedColumn
   }
 }
 
-export type DissectedReadQuery = {
+export type DissectedReadQuery<DB = any> = {
   operation: 'select'
   tables: {
+    [K in keyof DB]?: DissectedTable<DB[K]>
+  } & {
     [tableName: string]: DissectedTable
   }
   unidentifiedTable?: DissectedTable
 }
 
-export type DissectedWriteQuery = {
+export type DissectedWriteQuery<DB = any> = {
   operation: 'insert' | 'update' | 'delete' | 'unknown'
-  table?: string
+  table?: keyof DB & string
 }
 
-export type DissectedQuery = DissectedReadQuery | DissectedWriteQuery
+export type DissectedQuery<DB = any> = DissectedReadQuery<DB> | DissectedWriteQuery<DB>
 
 // Node kinds we handle at the root level
 type RootQueryNodeKind =
@@ -90,22 +94,24 @@ function extractTableFromNode(node: OperationNode): { name: string; alias?: stri
   }
 }
 
-function extractTableNameFromWriteTarget(node: OperationNode | undefined): string | undefined {
+function extractTableNameFromWriteTarget<DB = any>(
+  node: OperationNode | undefined,
+): (keyof DB & string) | undefined {
   if (!node) return undefined
   switch (node.kind) {
     case 'TableNode':
-      return getTableName(node as TableNode)
+      return getTableName(node as TableNode) as keyof DB & string
     case 'AliasNode': {
       const aliasNode = node as AliasNode
       if (aliasNode.node.kind === 'TableNode') {
-        return getTableName(aliasNode.node as TableNode)
+        return getTableName(aliasNode.node as TableNode) as keyof DB & string
       }
       return undefined
     }
     case 'FromNode': {
       const fromNode = node as FromNode
       const first = fromNode.froms[0]
-      if (first) return extractTableNameFromWriteTarget(first)
+      if (first) return extractTableNameFromWriteTarget<DB>(first)
       return undefined
     }
     default:
@@ -113,13 +119,13 @@ function extractTableNameFromWriteTarget(node: OperationNode | undefined): strin
   }
 }
 
-class SelectQueryDissector {
+class SelectQueryDissector<DB = any> {
   private tables: Map<string, DissectedTable> = new Map()
   private unidentifiedTable: DissectedTable | undefined
   // Maps alias → real table name
   private aliasMap: Map<string, string> = new Map()
 
-  dissect(node: SelectQueryNode): DissectedReadQuery {
+  dissect(node: SelectQueryNode): DissectedReadQuery<DB> {
     this.collectTables(node)
     this.collectSelections(node)
     this.collectWhereColumns(node)
@@ -315,7 +321,7 @@ class SelectQueryDissector {
   private processBinaryOperation(node: BinaryOperationNode): void {
     // Check for subquery on the right side — merge its results
     if (node.rightOperand.kind === 'SelectQueryNode') {
-      const subDissector = new SelectQueryDissector()
+      const subDissector = new SelectQueryDissector<DB>()
       const subResult = subDissector.dissect(node.rightOperand as SelectQueryNode)
       this.mergeReadResult(subResult)
     }
@@ -388,7 +394,7 @@ class SelectQueryDissector {
     }
   }
 
-  private mergeReadResult(sub: DissectedReadQuery): void {
+  private mergeReadResult(sub: DissectedReadQuery<DB>): void {
     for (const [tableName, subTable] of Object.entries(sub.tables)) {
       const target = this.getOrCreateTable(tableName)
       this.mergeTable(target, subTable)
@@ -413,18 +419,20 @@ class SelectQueryDissector {
   }
 }
 
-export function dissectQuery<Q extends OperationNodeSource>(query: Q): DissectedQuery {
+export function dissectQuery<DB = any, Q extends OperationNodeSource = OperationNodeSource>(
+  query: Q,
+): DissectedQuery<DB> {
   const node = query.toOperationNode()
 
   switch (node.kind) {
     case 'SelectQueryNode':
-      return new SelectQueryDissector().dissect(node as SelectQueryNode)
+      return new SelectQueryDissector<DB>().dissect(node as SelectQueryNode)
 
     case 'InsertQueryNode': {
       const insertNode = node as InsertQueryNode
       return {
         operation: 'insert',
-        table: extractTableNameFromWriteTarget(insertNode.into),
+        table: extractTableNameFromWriteTarget<DB>(insertNode.into),
       }
     }
 
@@ -432,7 +440,7 @@ export function dissectQuery<Q extends OperationNodeSource>(query: Q): Dissected
       const updateNode = node as UpdateQueryNode
       return {
         operation: 'update',
-        table: extractTableNameFromWriteTarget(updateNode.table),
+        table: extractTableNameFromWriteTarget<DB>(updateNode.table),
       }
     }
 
@@ -440,7 +448,7 @@ export function dissectQuery<Q extends OperationNodeSource>(query: Q): Dissected
       const deleteNode = node as DeleteQueryNode
       return {
         operation: 'delete',
-        table: extractTableNameFromWriteTarget(deleteNode.from),
+        table: extractTableNameFromWriteTarget<DB>(deleteNode.from),
       }
     }
 

@@ -10,7 +10,7 @@ import {
   type SqlBool,
 } from 'kysely'
 
-import { dissectQuery } from './dissect-query'
+import { dissectQuery, type DissectedColumn, type DissectedTable } from './dissect-query'
 
 interface Users {
   id: number
@@ -777,6 +777,138 @@ describe('dissectQuery', () => {
           },
         },
       })
+    })
+  })
+
+  describe('type-safe results', () => {
+    it('accepts DB type parameter for type-safe table access', () => {
+      const q = db.selectFrom('users').select('id').where('name', '=', 'John')
+      const result = dissectQuery<DB>(q)
+
+      // Runtime behavior unchanged
+      expect(result).toEqual({
+        operation: 'select',
+        tables: {
+          users: {
+            columns: {
+              id: { selected: true },
+              name: { selected: false, eq: ['John'] },
+            },
+          },
+        },
+      })
+
+      // Type-level checks using satisfies
+      if (result.operation === 'select') {
+        // Should have autocomplete for table names
+        result.tables.users satisfies DissectedTable<Users> | undefined
+        result.tables.posts satisfies DissectedTable<Posts> | undefined
+        result.tables.comments satisfies DissectedTable<Comments> | undefined
+
+        // Should have autocomplete for column names when table exists
+        if (result.tables.users) {
+          result.tables.users.columns.id satisfies DissectedColumn | undefined
+          result.tables.users.columns.name satisfies DissectedColumn | undefined
+          result.tables.users.columns.age satisfies DissectedColumn | undefined
+          expect(result.tables.users.columns.id).toBeDefined()
+        }
+      } else {
+        throw new Error(`Expected operation 'select', got '${result.operation}'`)
+      }
+    })
+
+    it('works without DB type parameter for backward compatibility', () => {
+      const q = db.selectFrom('users').select('id').where('name', '=', 'John')
+      const result = dissectQuery(q) // No type parameter
+
+      expect(result).toEqual({
+        operation: 'select',
+        tables: {
+          users: {
+            columns: {
+              id: { selected: true },
+              name: { selected: false, eq: ['John'] },
+            },
+          },
+        },
+      })
+    })
+
+    it('type-safe with multi-table query', () => {
+      const q = db
+        .selectFrom('users')
+        .innerJoin('posts', 'posts.user_id', 'users.id')
+        .select(['users.id', 'posts.title'])
+      const result = dissectQuery<DB>(q)
+
+      expect(result).toEqual({
+        operation: 'select',
+        tables: {
+          users: { columns: { id: { selected: true } } },
+          posts: { columns: { title: { selected: true } } },
+        },
+      })
+
+      // Type-level: should have autocomplete for both tables
+      if (result.operation === 'select') {
+        result.tables.users satisfies DissectedTable<Users> | undefined
+        result.tables.posts satisfies DissectedTable<Posts> | undefined
+        expect(result.tables.users).toBeDefined()
+        expect(result.tables.posts).toBeDefined()
+      } else {
+        throw new Error(`Expected operation 'select', got '${result.operation}'`)
+      }
+    })
+
+    it('type-safe with HAVING clause', () => {
+      const q = db.selectFrom('users').select('age').groupBy('age').having('age', '=', 25)
+      const result = dissectQuery<DB>(q)
+
+      expect(result).toEqual({
+        operation: 'select',
+        tables: {
+          users: {
+            columns: {
+              age: { selected: true, eq: [25] },
+            },
+          },
+        },
+      })
+
+      // Type-level: should have autocomplete
+      if (result.operation === 'select' && result.tables.users) {
+        result.tables.users.columns.age satisfies DissectedColumn | undefined
+        expect(result.tables.users.columns.age).toBeDefined()
+      } else {
+        throw new Error(
+          `Expected operation 'select' with users table, got operation='${result.operation}'`,
+        )
+      }
+    })
+
+    it('type-safe with write queries - table name is typed', () => {
+      const insertQuery = db
+        .insertInto('users')
+        .values({ id: 1, name: 'John', age: 30, deleted: false })
+      const insertResult = dissectQuery<DB>(insertQuery)
+
+      expect(insertResult).toEqual({ operation: 'insert', table: 'users' })
+
+      // Type-level: table should be typed as keyof DB
+      if (insertResult.operation === 'insert') {
+        insertResult.table satisfies 'users' | 'posts' | 'comments' | undefined
+        expect(insertResult.table).toBe('users')
+      } else {
+        throw new Error(`Expected operation 'insert', got '${insertResult.operation}'`)
+      }
+
+      const updateQuery = db.updateTable('posts').set({ title: 'New' }).where('id', '=', 1)
+      const updateResult = dissectQuery<DB>(updateQuery)
+      expect(updateResult).toEqual({ operation: 'update', table: 'posts' })
+
+      const deleteQuery = db.deleteFrom('comments').where('id', '=', 1)
+      const deleteResult = dissectQuery<DB>(deleteQuery)
+      expect(deleteResult).toEqual({ operation: 'delete', table: 'comments' })
     })
   })
 })
