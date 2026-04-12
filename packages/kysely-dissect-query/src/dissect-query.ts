@@ -7,6 +7,7 @@ import type {
   FromNode,
   InsertQueryNode,
   OperationNode,
+  IdentifierNode,
   OperationNodeKind,
   OperationNodeSource,
   OperatorNode,
@@ -83,7 +84,7 @@ function extractTableFromNode(node: OperationNode): { name: string; alias?: stri
         const realName = getTableName(aliasNode.node as TableNode)
         const alias =
           aliasNode.alias.kind === 'IdentifierNode'
-            ? (aliasNode.alias as unknown as { name: string }).name
+            ? (aliasNode.alias as IdentifierNode).name
             : undefined
         return { name: realName, alias }
       }
