@@ -3,8 +3,12 @@ import type {
   AndNode,
   BinaryOperationNode,
   ColumnNode,
+  CommonTableExpressionNode,
   DeleteQueryNode,
+  IdentifierNode,
   InsertQueryNode,
+  JoinNode,
+  JoinType,
   OperationNode,
   OperationNodeKind,
   OperationNodeSource,
@@ -15,6 +19,7 @@ import type {
   ReferenceNode,
   SelectQueryNode,
   TableNode,
+  UnaryOperationNode,
   UpdateQueryNode,
   ValueListNode,
   ValueNode,
@@ -71,6 +76,8 @@ type MaskMatcherTable<TableSchema> =
       type: 'narrow'
       columns: {
         [C in keyof TableSchema]?: MaskMatcherColumn
+      } & {
+        [C in string & {}]?: MaskMatcherColumn
       }
     }
 
@@ -122,13 +129,24 @@ class SelectMaskBuilder<DB = any> {
   // Tables that appear in FROM/JOIN — used for alias resolution and as the
   // widening scope when we can't attribute a column to a specific table.
   private queriedTables: Set<string> = new Set()
+  // Inner-joined (mandatory-presence) tables. A change to these rows can
+  // add/remove outer result rows even when no column is projected.
+  private mandatoryJoined: Set<string> = new Set()
   // Columns actually projected by SELECT, per table. Drives the output `select`.
   private selectedTables: Map<string, MaskSelectionTable> = new Map()
   private aliasMap: Map<string, string> = new Map()
+  // Names that look like tables in the outer query but actually refer to a
+  // subquery-in-FROM or CTE. Their selection/matchers are absorbed; outer
+  // references to these names are skipped so they don't leak into the mask.
+  private subqueryAliases: Map<string, ReadQueryMask<DB>> = new Map()
+  // Real tables whose scope has already been covered by an absorbed
+  // subquery/CTE matcher — avoids emitting a duplicate wide matcher for them
+  // from the outer no-WHERE branch.
+  private absorbedTables: Set<string> = new Set()
   private selectAll = false
   // Matchers derived from WHERE subqueries — they describe tables/columns the
   // subquery reads (its result changes iff one of those rows changes).
-  private subqueryMatchers: MaskMatcher[] = []
+  private subqueryMatchers: MaskMatcher<DB>[] = []
 
   build(node: SelectQueryNode): ReadQueryMask<DB> {
     this.collectTables(node)
@@ -136,25 +154,89 @@ class SelectMaskBuilder<DB = any> {
     const matchers = this.buildMatchers(node)
     return {
       operation: 'select',
-      select: select as MaskSelection<DB>,
-      matchers: matchers as MaskMatcher<DB>[],
+      select,
+      matchers,
     }
   }
 
   private collectTables(node: SelectQueryNode): void {
+    // CTEs are absorbed first so that FROM references to their names can be
+    // recognised as virtual tables rather than leaking into the outer mask.
+    if (node.with) {
+      for (const cte of node.with.expressions) this.absorbCte(cte)
+    }
     if (node.from) {
-      for (const fromItem of node.from.froms) this.registerTable(fromItem)
+      for (const fromItem of node.from.froms) this.registerFromItem(fromItem)
     }
     if (node.joins) {
-      for (const join of node.joins) this.registerTable(join.table)
+      for (const join of node.joins) {
+        const info = extractTableFromNode(join.table)
+        this.registerFromItem(join.table)
+        if (info && this.isMandatoryJoin(join.joinType)) {
+          this.mandatoryJoined.add(info.name)
+        }
+      }
     }
   }
 
-  private registerTable(node: OperationNode): void {
+  private isMandatoryJoin(kind: JoinType): boolean {
+    // Only joins that require a matching row for the outer row to survive.
+    // LEFT/RIGHT/FULL joins don't: missing matches become NULL-padded rows.
+    return kind === 'InnerJoin' || kind === 'CrossJoin' || kind === 'LateralInnerJoin'
+  }
+
+  private registerFromItem(node: OperationNode): void {
+    // Subquery-in-FROM: `selectFrom(eb => eb.selectFrom(...).as('u'))`
+    if (node.kind === 'AliasNode') {
+      const alias = node as AliasNode
+      if (alias.node.kind === 'SelectQueryNode') {
+        const aliasName =
+          alias.alias.kind === 'IdentifierNode' ? (alias.alias as IdentifierNode).name : undefined
+        const sub = new SelectMaskBuilder<DB>().build(alias.node as SelectQueryNode)
+        if (aliasName) this.absorbSubquery(aliasName, sub)
+        return
+      }
+    }
     const info = extractTableFromNode(node)
     if (!info) return
+    // If the name is a CTE, expose its absorbed real tables for column
+    // resolution without registering the CTE name itself.
+    const absorbedCte = this.subqueryAliases.get(info.name)
+    if (absorbedCte) {
+      if (absorbedCte.select.type === 'narrow') {
+        for (const t of Object.keys(absorbedCte.select.tables)) this.queriedTables.add(t)
+      }
+      if (info.alias) this.subqueryAliases.set(info.alias, absorbedCte)
+      return
+    }
     this.queriedTables.add(info.name)
     if (info.alias) this.aliasMap.set(info.alias, info.name)
+  }
+
+  private absorbCte(cte: CommonTableExpressionNode): void {
+    const aliasName = getTableName(cte.name.table)
+    if (cte.expression.kind !== 'SelectQueryNode') return
+    const sub = new SelectMaskBuilder<DB>().build(cte.expression as SelectQueryNode)
+    this.absorbSubquery(aliasName, sub)
+  }
+
+  private absorbSubquery(aliasName: string, sub: ReadQueryMask<DB>): void {
+    this.subqueryAliases.set(aliasName, sub)
+    if (sub.select.type === 'all') {
+      this.selectAll = true
+    } else {
+      const subTables = sub.select.tables as Record<string, MaskSelectionTable | undefined>
+      for (const [tName, tSel] of Object.entries(subTables)) {
+        if (!tSel) continue
+        this.absorbedTables.add(tName)
+        if (tSel.type === 'all') {
+          this.widenSelectedTable(tName)
+        } else {
+          for (const col of Object.keys(tSel.columns)) this.addSelectedColumn(tName, col)
+        }
+      }
+    }
+    for (const m of sub.matchers) this.subqueryMatchers.push(m)
   }
 
   private resolveTableName(tableRef: string): string {
@@ -163,7 +245,7 @@ class SelectMaskBuilder<DB = any> {
 
   // ---------- Selection ----------
 
-  private buildSelection(node: SelectQueryNode): MaskSelection {
+  private buildSelection(node: SelectQueryNode): MaskSelection<DB> {
     if (node.selections) {
       for (const sel of node.selections) {
         if (this.selectAll) break
@@ -173,7 +255,7 @@ class SelectMaskBuilder<DB = any> {
     if (this.selectAll) return { type: 'all' }
     const tables: Record<string, MaskSelectionTable> = {}
     for (const [name, table] of this.selectedTables) tables[name] = table
-    return { type: 'narrow', tables }
+    return { type: 'narrow', tables: tables as any }
   }
 
   private widenSelectedTable(tableName: string): void {
@@ -199,12 +281,19 @@ class SelectMaskBuilder<DB = any> {
         const ref = node as ReferenceNode
         if (ref.column.kind === 'SelectAllNode') {
           if (ref.table) {
-            const resolved = this.resolveTableName(getTableName(ref.table as TableNode))
-            this.widenSelectedTable(resolved)
+            const name = getTableName(ref.table as TableNode)
+            if (this.subqueryAliases.has(name)) break
+            this.widenSelectedTable(this.resolveTableName(name))
           } else {
             this.widenAllQueriedSelection()
           }
         } else {
+          if (ref.table) {
+            const name = getTableName(ref.table as TableNode)
+            // Reference into a subquery-in-FROM / CTE alias — its selection
+            // is already absorbed; ignore the outer reference.
+            if (this.subqueryAliases.has(name)) break
+          }
           const resolved = this.resolveColumnRef(ref)
           if (!resolved) {
             this.selectAll = true
@@ -254,18 +343,25 @@ class SelectMaskBuilder<DB = any> {
 
   // ---------- Matchers ----------
 
-  private buildMatchers(node: SelectQueryNode): MaskMatcher[] {
+  private buildMatchers(node: SelectQueryNode): MaskMatcher<DB>[] {
     let conjuncts: Conjunct[]
     if (node.where) {
       conjuncts = this.toDNF(node.where.where)
     } else {
-      // No WHERE: rows from any selected table are in scope.
-      conjuncts = [{ kind: 'tables-all', tables: [...this.selectedTables.keys()] }]
+      // No WHERE: any row of a selected table or a mandatory-join table can
+      // affect the result set. Tables whose scope is already covered by an
+      // absorbed subquery/CTE matcher are excluded to avoid duplication.
+      const scope = new Set<string>(this.selectedTables.keys())
+      for (const t of this.mandatoryJoined) scope.add(t)
+      for (const t of this.absorbedTables) scope.delete(t)
+      conjuncts = scope.size > 0 ? [{ kind: 'tables-all', tables: [...scope] }] : []
     }
 
     if (node.having) {
-      // HAVING operates on groupings and isn't cleanly row-level; widen to
-      // all queried tables (unless we already have an equally-wide conjunct).
+      // HAVING operates on groupings and isn't cleanly row-level. Push a
+      // `tables-all` conjunct as an additional DNF branch (OR, not AND) so
+      // the emitted matchers include a wide row-level match for every queried
+      // table. Skip if an existing branch already covers the same width.
       const havingWidth = [...this.queriedTables]
       const alreadyWide = conjuncts.some(
         c => c.kind === 'tables-all' && this.covers(c.tables, havingWidth),
@@ -273,7 +369,7 @@ class SelectMaskBuilder<DB = any> {
       if (!alreadyWide) conjuncts.push({ kind: 'tables-all', tables: havingWidth })
     }
 
-    const matchers: MaskMatcher[] = []
+    const matchers: MaskMatcher<DB>[] = []
     for (const c of conjuncts) this.emitMatchers(c, matchers)
     matchers.push(...this.subqueryMatchers)
     return this.dedupMatchers(matchers)
@@ -285,14 +381,28 @@ class SelectMaskBuilder<DB = any> {
     return true
   }
 
-  private emitMatchers(c: Conjunct, out: MaskMatcher[]): void {
+  private createNarrowMatcher(table: string, match: MaskMatcherTable<any>): MaskMatcher<DB> {
+    return {
+      type: 'narrow',
+      table,
+      match,
+    } as MaskMatcher<DB>
+  }
+
+  private isNarrowTable(
+    table: MaskSelectionTable | undefined,
+  ): table is Extract<MaskSelectionTable, { type: 'narrow' }> {
+    return table?.type === 'narrow'
+  }
+
+  private emitMatchers(c: Conjunct, out: MaskMatcher<DB>[]): void {
     if (c.kind === 'tables-all') {
       if (c.tables.length === 0) {
         out.push({ type: 'all' })
         return
       }
       for (const t of c.tables) {
-        out.push({ type: 'narrow', table: t as any, match: { type: 'all' } })
+        out.push(this.createNarrowMatcher(t, { type: 'all' }))
       }
       return
     }
@@ -306,7 +416,7 @@ class SelectMaskBuilder<DB = any> {
         out.push({ type: 'all' })
       } else {
         for (const t of this.queriedTables) {
-          out.push({ type: 'narrow', table: t as any, match: { type: 'all' } })
+          out.push(this.createNarrowMatcher(t, { type: 'all' }))
         }
       }
       return
@@ -319,17 +429,13 @@ class SelectMaskBuilder<DB = any> {
         const existing = columns[col]
         columns[col] = existing ? this.andMergeColumn(existing, v) : v
       }
-      out.push({
-        type: 'narrow',
-        table: t as any,
-        match: { type: 'narrow', columns },
-      })
+      out.push(this.createNarrowMatcher(t, { type: 'narrow', columns }))
     }
   }
 
-  private dedupMatchers(matchers: MaskMatcher[]): MaskMatcher[] {
+  private dedupMatchers(matchers: MaskMatcher<DB>[]): MaskMatcher<DB>[] {
     const seen = new Set<string>()
-    const out: MaskMatcher[] = []
+    const out: MaskMatcher<DB>[] = []
     for (const m of matchers) {
       const key = JSON.stringify(m)
       if (seen.has(key)) continue
@@ -355,10 +461,29 @@ class SelectMaskBuilder<DB = any> {
       case 'BinaryOperationNode': {
         return [this.processBinaryOp(node as BinaryOperationNode)]
       }
+      case 'UnaryOperationNode': {
+        // NOT X: keep the column references from X but widen their value
+        // predicates (a negated equality no longer pins a specific value).
+        const u = node as UnaryOperationNode
+        return this.toDNF(u.operand).map(c => this.widenConjunctValues(c))
+      }
       default:
         // Raw SQL / unrecognized predicate — could touch any queried table.
         return [{ kind: 'tables-all', tables: [...this.queriedTables] }]
     }
+  }
+
+  private widenConjunctValues(c: Conjunct): Conjunct {
+    if (c.kind === 'tables-all') return c
+    const perTable = new Map<string, Map<string, MaskMatcherColumn>>()
+    for (const [t, cols] of c.perTable) {
+      const m = new Map<string, MaskMatcherColumn>()
+      for (const [k] of cols) m.set(k, { type: 'all' })
+      perTable.set(t, m)
+    }
+    const unqualified = new Map<string, MaskMatcherColumn>()
+    for (const [k] of c.unqualified) unqualified.set(k, { type: 'all' })
+    return { kind: 'narrow', perTable, unqualified }
   }
 
   private crossAnd(a: Conjunct[], b: Conjunct[]): Conjunct[] {
@@ -456,7 +581,13 @@ class SelectMaskBuilder<DB = any> {
     const columnName = (ref.column as ColumnNode).column.name
 
     if (ref.table) {
-      const resolved = this.resolveTableName(getTableName(ref.table as TableNode))
+      const rawName = getTableName(ref.table as TableNode)
+      // WHERE on a subquery/CTE alias — conservatively widen (we don't try
+      // to map the column back into the absorbed tables here).
+      if (this.subqueryAliases.has(rawName)) {
+        return { kind: 'tables-all', tables: [...this.queriedTables] }
+      }
+      const resolved = this.resolveTableName(rawName)
       const perTable = new Map<string, Map<string, MaskMatcherColumn>>()
       perTable.set(resolved, new Map([[columnName, column]]))
       return { kind: 'narrow', perTable, unqualified: new Map() }
@@ -482,24 +613,20 @@ class SelectMaskBuilder<DB = any> {
       this.subqueryMatchers.push({ type: 'all' })
       return
     }
-    for (const [tableName, table] of Object.entries(sub.select.tables)) {
+    const tables = sub.select.tables as Record<string, MaskSelectionTable | undefined>
+    for (const [tableName, table] of Object.entries(tables)) {
       if (!table) continue
-      if ((table as MaskSelectionTable).type === 'all') {
-        this.subqueryMatchers.push({
-          type: 'narrow',
-          table: tableName as any,
-          match: { type: 'all' },
-        })
+      if (table.type === 'all') {
+        this.subqueryMatchers.push(this.createNarrowMatcher(tableName, { type: 'all' }))
         continue
       }
-      const columns: Record<string, MaskMatcherColumn> = {}
-      const narrowTable = table as Extract<MaskSelectionTable, { type: 'narrow' }>
-      for (const col of Object.keys(narrowTable.columns)) columns[col] = { type: 'all' }
-      this.subqueryMatchers.push({
-        type: 'narrow',
-        table: tableName as any,
-        match: { type: 'narrow', columns },
-      })
+      if (this.isNarrowTable(table)) {
+        const columns: Record<string, MaskMatcherColumn> = {}
+        for (const col of Object.keys(table.columns)) {
+          columns[col] = { type: 'all' }
+        }
+        this.subqueryMatchers.push(this.createNarrowMatcher(tableName, { type: 'narrow', columns }))
+      }
     }
     // Subquery's own WHERE-derived matchers also propagate.
     for (const m of sub.matchers) {
@@ -513,7 +640,7 @@ class SelectMaskBuilder<DB = any> {
         em => em.type === 'narrow' && em.table === m.table && em.match.type === 'narrow',
       )
       if (m.match.type === 'all' && existingNarrow) continue
-      this.subqueryMatchers.push(m as any)
+      this.subqueryMatchers.push(m)
     }
   }
 
@@ -526,10 +653,13 @@ class SelectMaskBuilder<DB = any> {
     switch (node.kind) {
       case 'PrimitiveValueListNode':
         return [...(node as PrimitiveValueListNode).values]
-      case 'ValueListNode':
-        return (node as ValueListNode).values
-          .filter((v): v is ValueNode => v.kind === 'ValueNode')
-          .map(v => v.value)
+      case 'ValueListNode': {
+        const items = (node as ValueListNode).values
+        // If any element isn't a literal, we can't safely narrow the column —
+        // bail out so the caller widens to `{type:'all'}`.
+        if (items.some(v => v.kind !== 'ValueNode')) return undefined
+        return items.map(v => (v as ValueNode).value)
+      }
       default:
         return undefined
     }

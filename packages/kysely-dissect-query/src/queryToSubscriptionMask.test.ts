@@ -454,7 +454,7 @@ const tests: TestCase[] = [
     },
   },
   {
-    it: 'selectAll(users) — widen users only',
+    it: 'selectAll(users) on inner join — users columns widened; posts still produces a matcher',
     query: db
       .selectFrom('users')
       .innerJoin('posts', 'posts.user_id', 'users.id')
@@ -468,11 +468,8 @@ const tests: TestCase[] = [
         },
       },
       matchers: [
-        {
-          type: 'narrow',
-          table: 'users',
-          match: { type: 'all' },
-        },
+        { type: 'narrow', table: 'users', match: { type: 'all' } },
+        { type: 'narrow', table: 'posts', match: { type: 'all' } },
       ],
     },
   },
@@ -945,10 +942,204 @@ const tests: TestCase[] = [
       ],
     },
   },
+  {
+    it: 'AND of two = on same column is a contradiction, not a union, but is treated as a union',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where('name', '=', 'John')
+      .where('name', '=', 'Jane'),
+    // Semantically the predicate is unsatisfiable. We still treat it as a union
+    // which is "limited" over-matching (that's ok).
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'values', values: ['John', 'Jane'] } },
+          },
+        },
+      ],
+    },
+  },
+]
+
+// Tests below encode intended/ideal behavior for known gaps. They may fail
+// against the current implementation; that's expected — they pin the design
+// decisions until the code catches up.
+const pendingTests: TestCase[] = [
+  // ---- point 2: non-literal members inside an IN list ----
+  // REVIEW: FIX IT
+  {
+    it: 'IN list with a non-literal element → column widened to all',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb('name', 'in', [sql<string>`lower('JOHN')`, 'Bob'])),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'all' } },
+          },
+        },
+      ],
+    },
+  },
+  // ---- point 3: dedup must not depend on column key insertion order ----
+  {
+    it: 'OR of two AND branches with same columns in different order should dedup',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb =>
+        eb.or([
+          eb.and([eb('name', '=', 'John'), eb('age', '=', 30)]),
+          eb.and([eb('age', '=', 30), eb('name', '=', 'John')]),
+        ]),
+      ),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: {
+              name: { type: 'values', values: ['John'] },
+              age: { type: 'values', values: [30] },
+            },
+          },
+        },
+      ],
+    },
+  },
+  // ---- point 5: joined-but-unselected table should still produce a matcher ----
+  // REVIEW: FIX IT (i don't think it applies to left join though, for example.)
+  {
+    it: 'inner join where joined table is not selected still produces a matcher',
+    query: db
+      .selectFrom('users')
+      .innerJoin('posts', 'posts.user_id', 'users.id')
+      .select('users.id'),
+    // `posts` rows can add/remove result rows via the join even though no
+    // column is projected, so the subscription should include a posts matcher.
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+        },
+      },
+      matchers: [
+        { type: 'narrow', table: 'users', match: { type: 'all' } },
+        { type: 'narrow', table: 'posts', match: { type: 'all' } },
+      ],
+    },
+  },
+  // ---- point 6: coverage gaps ----
+  // REVIEW: FIX IT
+  {
+    it: 'NOT predicate over an equality → column widened to all',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.not(eb('name', '=', 'John'))),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'all' } },
+          },
+        },
+      ],
+    },
+  },
+  // REVIEW: FIX IT
+  {
+    it: 'subquery used as a table in FROM propagates inner tables',
+    query: db.selectFrom(eb => eb.selectFrom('users').select('users.id').as('u')).select('u.id'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+        },
+      },
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
+    },
+  },
+  // REVIEW: FIX IT
+  {
+    it: 'CTE (WITH) — referenced base tables propagate to the outer mask',
+    query: db
+      .with('active_users', d =>
+        d.selectFrom('users').select('users.id').where('deleted', '=', false),
+      )
+      .selectFrom('active_users')
+      .select('id'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { deleted: { type: 'values', values: [false] } },
+          },
+        },
+      ],
+    },
+  },
 ]
 
 describe('queryToSubscriptionMask', () => {
   for (const t of tests) {
+    it(t.it, () => {
+      expect(queryToSubscriptionMask<DB>(t.query)).toEqual(t.result)
+    })
+  }
+})
+
+describe('queryToSubscriptionMask (pending / known gaps)', () => {
+  for (const t of pendingTests) {
     it(t.it, () => {
       expect(queryToSubscriptionMask<DB>(t.query)).toEqual(t.result)
     })
