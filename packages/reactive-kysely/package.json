@@ -1,5 +1,5 @@
 {
-  "name": "@repliql/kysely-dissect-query",
+  "name": "@repliql/reactive-kysely",
   "version": "0.0.1",
   "description": "",
   "keywords": [

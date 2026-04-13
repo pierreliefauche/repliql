@@ -6,6 +6,7 @@ import type {
   ColumnNode,
   CommonTableExpressionNode,
   DeleteQueryNode,
+  FromNode,
   IdentifierNode,
   InsertQueryNode,
   JoinType,
@@ -24,12 +25,6 @@ import type {
   ValueListNode,
   ValueNode,
 } from 'kysely'
-
-import {
-  extractTableFromNode,
-  extractTableNameFromWriteTarget,
-  getTableName,
-} from './dissect-query'
 
 type MaskSelectionColumn =
   | { type: 'all' }
@@ -124,6 +119,58 @@ type Conjunct =
       perTable: Map<string, Map<string, MaskMatcherColumn>>
       unqualified: Map<string, MaskMatcherColumn>
     }
+
+export function getTableName(node: TableNode): string {
+  return node.table.identifier.name
+}
+
+export function extractTableFromNode(
+  node: OperationNode,
+): { name: string; alias?: string } | undefined {
+  switch (node.kind) {
+    case 'TableNode':
+      return { name: getTableName(node as TableNode) }
+    case 'AliasNode': {
+      const aliasNode = node as AliasNode
+      if (aliasNode.node.kind === 'TableNode') {
+        const realName = getTableName(aliasNode.node as TableNode)
+        const alias =
+          aliasNode.alias.kind === 'IdentifierNode'
+            ? (aliasNode.alias as IdentifierNode).name
+            : undefined
+        return { name: realName, alias }
+      }
+      return undefined
+    }
+    default:
+      return undefined
+  }
+}
+
+export function extractTableNameFromWriteTarget<DB = any>(
+  node: OperationNode | undefined,
+): (keyof DB & string) | undefined {
+  if (!node) return undefined
+  switch (node.kind) {
+    case 'TableNode':
+      return getTableName(node as TableNode) as keyof DB & string
+    case 'AliasNode': {
+      const aliasNode = node as AliasNode
+      if (aliasNode.node.kind === 'TableNode') {
+        return getTableName(aliasNode.node as TableNode) as keyof DB & string
+      }
+      return undefined
+    }
+    case 'FromNode': {
+      const fromNode = node as FromNode
+      const first = fromNode.froms[0]
+      if (first) return extractTableNameFromWriteTarget<DB>(first)
+      return undefined
+    }
+    default:
+      return undefined
+  }
+}
 
 class SelectMaskBuilder<DB = any> {
   // Tables that appear in FROM/JOIN — used for alias resolution and as the
