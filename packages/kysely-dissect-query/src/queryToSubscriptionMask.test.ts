@@ -62,7 +62,7 @@ const tests: TestCase[] = [
     result: {
       operation: 'select',
       select: { type: 'narrow', tables: { users: { type: 'all' } } },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -79,7 +79,7 @@ const tests: TestCase[] = [
           },
         },
       },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -93,7 +93,7 @@ const tests: TestCase[] = [
           users: { type: 'narrow', columns: { id: { type: 'all' } } },
         },
       },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -113,11 +113,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { age: { type: 'all' } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { age: { type: 'all' } },
           },
         },
       ],
@@ -141,7 +140,13 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+          table: 'users',
+          match: { type: 'all' },
+        },
+        {
+          type: 'narrow',
+          table: 'posts',
+          match: { type: 'all' },
         },
       ],
     },
@@ -155,15 +160,13 @@ const tests: TestCase[] = [
         type: 'narrow',
         tables: {
           users: { type: 'narrow', columns: { id: { type: 'all' } } },
-          // REVIEW: we're not returning anything from posts, is there a way to avoid it?
-          posts: { type: 'narrow', columns: {} },
         },
       },
       matchers: [
         {
           type: 'narrow',
-          // REVIEW: if a post changes, this query result will not, right? Is there a way to avoid listing posts in matcher?
-          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+          table: 'users',
+          match: { type: 'all' },
         },
       ],
     },
@@ -181,14 +184,24 @@ const tests: TestCase[] = [
         type: 'narrow',
         tables: {
           users: { type: 'narrow', columns: { id: { type: 'all' } } },
-          posts: { type: 'narrow', columns: {} },
         },
       },
       matchers: [
         {
           type: 'narrow',
-          // REVIEW: we should narrow to column "age" no?
-          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { age: { type: 'values', values: [34] } },
+          },
+        },
+        {
+          type: 'narrow',
+          table: 'posts',
+          match: {
+            type: 'narrow',
+            columns: { age: { type: 'values', values: [34] } },
+          },
         },
       ],
     },
@@ -208,7 +221,13 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+          table: 'users',
+          match: { type: 'all' },
+        },
+        {
+          type: 'narrow',
+          table: 'posts',
+          match: { type: 'all' },
         },
       ],
     },
@@ -226,11 +245,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { name: { type: 'values', values: ['John'] } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'values', values: ['John'] } },
           },
         },
       ],
@@ -248,11 +266,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { name: { type: 'values', values: ['Alice', 'Bob'] } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'values', values: ['Alice', 'Bob'] } },
           },
         },
       ],
@@ -270,8 +287,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: { type: 'narrow', columns: { age: { type: 'all' } } },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { age: { type: 'all' } },
           },
         },
       ],
@@ -289,8 +308,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: { type: 'narrow', columns: { deleted: { type: 'all' } } },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { deleted: { type: 'all' } },
           },
         },
       ],
@@ -308,13 +329,12 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: {
-                name: { type: 'values', values: ['John'] },
-                age: { type: 'all' },
-              },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: {
+              name: { type: 'values', values: ['John'] },
+              age: { type: 'all' },
             },
           },
         },
@@ -337,11 +357,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { name: { type: 'values', values: ['John', 'Jane'] } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'values', values: ['John', 'Jane'] } },
           },
         },
       ],
@@ -366,8 +385,19 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          // REVIEW: same we can probably narrow to column "age" no?
-          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { age: { type: 'all' } },
+          },
+        },
+        {
+          type: 'narrow',
+          table: 'posts',
+          match: {
+            type: 'narrow',
+            columns: { age: { type: 'all' } },
+          },
         },
       ],
     },
@@ -383,7 +413,7 @@ const tests: TestCase[] = [
           users: { type: 'narrow', columns: { id: { type: 'all' } } },
         },
       },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -397,7 +427,7 @@ const tests: TestCase[] = [
           users: { type: 'narrow', columns: { id: { type: 'all' } } },
         },
       },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -414,11 +444,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { name: { type: 'values', values: ['John'] } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'values', values: ['John'] } },
           },
         },
       ],
@@ -436,15 +465,13 @@ const tests: TestCase[] = [
         type: 'narrow',
         tables: {
           users: { type: 'all' },
-          // REVIEW: We don't select anything from posts, so should it be here at all?
-          posts: { type: 'narrow', columns: {} },
         },
       },
       matchers: [
         {
           type: 'narrow',
-          // REVIEW: should posts be listed? since it's not used in any way, no selection or WHERE
-          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+          table: 'users',
+          match: { type: 'all' },
         },
       ],
     },
@@ -464,7 +491,13 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+          table: 'users',
+          match: { type: 'all' },
+        },
+        {
+          type: 'narrow',
+          table: 'posts',
+          match: { type: 'all' },
         },
       ],
     },
@@ -484,10 +517,18 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          // REVIEW: here though posts should be present, because if a post changes the result of the query would change potentially
-          // and it matches user_id column on posts
-          tables: {
-            users: { type: 'narrow', columns: { id: { type: 'all' } } },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { id: { type: 'all' } },
+          },
+        },
+        {
+          type: 'narrow',
+          table: 'posts',
+          match: {
+            type: 'narrow',
+            columns: { user_id: { type: 'all' } },
           },
         },
       ],
@@ -511,20 +552,26 @@ const tests: TestCase[] = [
           posts: { type: 'narrow', columns: { title: { type: 'all' } } },
         },
       },
-      // `age` is unqualified in multi-table → its conjunct is {type:all} (identity of AND);
-      // the other two narrow predicates merge into a single matcher.
       matchers: [
         {
           type: 'narrow',
-          // REVIEW: age should be included in all tables, since we don't know where it is from
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { name: { type: 'values', values: ['John'] } },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: {
+              age: { type: 'all' },
+              name: { type: 'values', values: ['John'] },
             },
-            posts: {
-              type: 'narrow',
-              columns: { tag: { type: 'values', values: ['news', 'archive'] } },
+          },
+        },
+        {
+          type: 'narrow',
+          table: 'posts',
+          match: {
+            type: 'narrow',
+            columns: {
+              age: { type: 'all' },
+              tag: { type: 'values', values: ['news', 'archive'] },
             },
           },
         },
@@ -546,7 +593,13 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+          table: 'users',
+          match: { type: 'all' },
+        },
+        {
+          type: 'narrow',
+          table: 'posts',
+          match: { type: 'all' },
         },
       ],
     },
@@ -563,11 +616,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { name: { type: 'values', values: ['John'] } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'values', values: ['John'] } },
           },
         },
       ],
@@ -585,8 +637,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: { type: 'narrow', columns: { age: { type: 'all' } } },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { age: { type: 'all' } },
           },
         },
       ],
@@ -608,20 +662,18 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { name: { type: 'values', values: ['John'] } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'values', values: ['John'] } },
           },
         },
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { name: { type: 'values', values: ['Jane'] } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'values', values: ['Jane'] } },
           },
         },
       ],
@@ -644,23 +696,21 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: {
-                name: { type: 'values', values: ['John'] },
-                age: { type: 'values', values: [30] },
-              },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: {
+              name: { type: 'values', values: ['John'] },
+              age: { type: 'values', values: [30] },
             },
           },
         },
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { deleted: { type: 'values', values: [true] } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { deleted: { type: 'values', values: [true] } },
           },
         },
       ],
@@ -691,7 +741,7 @@ const tests: TestCase[] = [
     result: {
       operation: 'select',
       select: { type: 'all' },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -706,7 +756,7 @@ const tests: TestCase[] = [
         type: 'narrow',
         tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
       },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -721,7 +771,7 @@ const tests: TestCase[] = [
         type: 'narrow',
         tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
       },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -739,8 +789,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: { type: 'narrow', columns: { name: { type: 'all' } } },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'all' } },
           },
         },
       ],
@@ -761,8 +813,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: { type: 'narrow', columns: { name: { type: 'all' } } },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'all' } },
           },
         },
       ],
@@ -776,7 +830,7 @@ const tests: TestCase[] = [
     result: {
       operation: 'select',
       select: { type: 'all' },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -795,11 +849,10 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { name: { type: 'values', values: ['John'] } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'values', values: ['John'] } },
           },
         },
       ],
@@ -815,7 +868,7 @@ const tests: TestCase[] = [
         type: 'narrow',
         tables: { users: { type: 'narrow', columns: { age: { type: 'all' } } } },
       },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -835,16 +888,16 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: {
-            users: {
-              type: 'narrow',
-              columns: { name: { type: 'values', values: ['John'] } },
-            },
+          table: 'users',
+          match: {
+            type: 'narrow',
+            columns: { name: { type: 'values', values: ['John'] } },
           },
         },
         {
           type: 'narrow',
-          tables: { users: { type: 'all' } },
+          table: 'users',
+          match: { type: 'all' },
         },
       ],
     },
@@ -858,7 +911,7 @@ const tests: TestCase[] = [
         type: 'narrow',
         tables: { users: { type: 'all' } },
       },
-      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+      matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
   {
@@ -881,7 +934,13 @@ const tests: TestCase[] = [
       matchers: [
         {
           type: 'narrow',
-          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+          table: 'users',
+          match: { type: 'all' },
+        },
+        {
+          type: 'narrow',
+          table: 'posts',
+          match: { type: 'all' },
         },
       ],
     },

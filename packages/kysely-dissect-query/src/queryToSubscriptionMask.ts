@@ -27,12 +27,7 @@ import {
 } from './dissect-query'
 
 type MaskSelectionColumn =
-  // "fields" if for when columns contain JSON
-  // but that's not something you can know,
-  // so always use "type: all" to mean "any and all values for that column"
-  | {
-      type: 'all'
-    }
+  | { type: 'all' }
   | {
       type: 'narrow'
       fields: {
@@ -41,10 +36,7 @@ type MaskSelectionColumn =
     }
 
 type MaskSelectionTable<TableSchema = any> =
-  | {
-      // When we cannot determine which exact columns are being selected
-      type: 'all'
-    }
+  | { type: 'all' }
   | {
       type: 'narrow'
       columns: {
@@ -53,10 +45,7 @@ type MaskSelectionTable<TableSchema = any> =
     }
 
 type MaskSelection<DB = any> =
-  | {
-      // When we cannot determine which exact tables are being selected
-      type: 'all'
-    }
+  | { type: 'all' }
   | {
       type: 'narrow'
       tables: {
@@ -64,29 +53,11 @@ type MaskSelection<DB = any> =
       }
     }
 
-// Fields are to match in json, which you cannot do,
-// so don't use it
-type MaskMatcherField =
-  | {
-      type: 'all'
-    }
-  | {
-      type: 'narrow'
-      values: unknown[]
-    }
+type MaskMatcherField = { type: 'all' } | { type: 'narrow'; values: unknown[] }
 
 type MaskMatcherColumn =
-  // To match any value of that column (use that in doubt)
-  | {
-      type: 'all'
-    }
-  // to match with **equality**, for strings, numbers, booleans
-  | {
-      type: 'values'
-      values: unknown[]
-    }
-  // Fields are to match in json, which you cannot do,
-  // so don't use it
+  | { type: 'all' }
+  | { type: 'values'; values: unknown[] }
   | {
       type: 'fields'
       fields: {
@@ -95,9 +66,7 @@ type MaskMatcherColumn =
     }
 
 type MaskMatcherTable<TableSchema> =
-  | {
-      type: 'all'
-    }
+  | { type: 'all' }
   | {
       type: 'narrow'
       columns: {
@@ -105,18 +74,15 @@ type MaskMatcherTable<TableSchema> =
       }
     }
 
-export type MaskMatcher<DB = any, T extends keyof DB = keyof DB> =
-  // To match everything on all tables
-  // useful when we cannot infer what to match against from AST
+export type MaskMatcher<DB = any> =
+  | { type: 'all' }
   | {
-      type: 'all'
-    }
-  // REVIEW: I changed this type to allow only 1 table per matcher
-  | {
-      type: 'narrow'
-      table: T
-      match: MaskMatcherTable<DB[T]>
-    }
+      [T in keyof DB]: {
+        type: 'narrow'
+        table: T
+        match: MaskMatcherTable<DB[T]>
+      }
+    }[keyof DB]
 
 export type ReadQueryMask<DB = any> = {
   operation: 'select'
@@ -139,16 +105,40 @@ type RootQueryNodeKind =
 
 type NonRootQueryNodeKind = Exclude<OperationNodeKind, RootQueryNodeKind>
 
+// Internal representation of a WHERE conjunct (a single AND-chain after DNF).
+type Conjunct =
+  // "Match any row of any of these tables". Empty list means no scope — emits a
+  // single top-level {type:'all'} matcher (no queried tables known).
+  | { kind: 'tables-all'; tables: string[] }
+  // Narrow constraints, organised per-table plus unqualified-column constraints
+  // that could belong to any queried table.
+  | {
+      kind: 'narrow'
+      perTable: Map<string, Map<string, MaskMatcherColumn>>
+      unqualified: Map<string, MaskMatcherColumn>
+    }
+
 class SelectMaskBuilder<DB = any> {
-  private tables: Map<string, MaskSelectionTable> = new Map()
+  // Tables that appear in FROM/JOIN — used for alias resolution and as the
+  // widening scope when we can't attribute a column to a specific table.
+  private queriedTables: Set<string> = new Set()
+  // Columns actually projected by SELECT, per table. Drives the output `select`.
+  private selectedTables: Map<string, MaskSelectionTable> = new Map()
   private aliasMap: Map<string, string> = new Map()
   private selectAll = false
+  // Matchers derived from WHERE subqueries — they describe tables/columns the
+  // subquery reads (its result changes iff one of those rows changes).
+  private subqueryMatchers: MaskMatcher[] = []
 
   build(node: SelectQueryNode): ReadQueryMask<DB> {
     this.collectTables(node)
     const select = this.buildSelection(node)
     const matchers = this.buildMatchers(node)
-    return { operation: 'select', select: select as MaskSelection<DB>, matchers }
+    return {
+      operation: 'select',
+      select: select as MaskSelection<DB>,
+      matchers: matchers as MaskMatcher<DB>[],
+    }
   }
 
   private collectTables(node: SelectQueryNode): void {
@@ -163,31 +153,12 @@ class SelectMaskBuilder<DB = any> {
   private registerTable(node: OperationNode): void {
     const info = extractTableFromNode(node)
     if (!info) return
-    if (!this.tables.has(info.name)) {
-      this.tables.set(info.name, { type: 'narrow', columns: {} })
-    }
+    this.queriedTables.add(info.name)
     if (info.alias) this.aliasMap.set(info.alias, info.name)
   }
 
   private resolveTableName(tableRef: string): string {
     return this.aliasMap.get(tableRef) ?? tableRef
-  }
-
-  private widenTable(tableName: string): void {
-    this.tables.set(tableName, { type: 'all' })
-  }
-
-  private addColumn(tableName: string, columnName: string): void {
-    const existing = this.tables.get(tableName)
-    if (!existing) {
-      this.tables.set(tableName, {
-        type: 'narrow',
-        columns: { [columnName]: { type: 'all' } },
-      })
-      return
-    }
-    if (existing.type === 'all') return
-    existing.columns[columnName] = { type: 'all' }
   }
 
   // ---------- Selection ----------
@@ -201,8 +172,25 @@ class SelectMaskBuilder<DB = any> {
     }
     if (this.selectAll) return { type: 'all' }
     const tables: Record<string, MaskSelectionTable> = {}
-    for (const [name, table] of this.tables) tables[name] = table
+    for (const [name, table] of this.selectedTables) tables[name] = table
     return { type: 'narrow', tables }
+  }
+
+  private widenSelectedTable(tableName: string): void {
+    this.selectedTables.set(tableName, { type: 'all' })
+  }
+
+  private addSelectedColumn(tableName: string, columnName: string): void {
+    const existing = this.selectedTables.get(tableName)
+    if (!existing) {
+      this.selectedTables.set(tableName, {
+        type: 'narrow',
+        columns: { [columnName]: { type: 'all' } },
+      })
+      return
+    }
+    if (existing.type === 'all') return
+    existing.columns[columnName] = { type: 'all' }
   }
 
   private processSelection(node: OperationNode): void {
@@ -212,9 +200,9 @@ class SelectMaskBuilder<DB = any> {
         if (ref.column.kind === 'SelectAllNode') {
           if (ref.table) {
             const resolved = this.resolveTableName(getTableName(ref.table as TableNode))
-            this.widenTable(resolved)
+            this.widenSelectedTable(resolved)
           } else {
-            this.widenAllTablesOrAll()
+            this.widenAllQueriedSelection()
           }
         } else {
           const resolved = this.resolveColumnRef(ref)
@@ -222,12 +210,12 @@ class SelectMaskBuilder<DB = any> {
             this.selectAll = true
             return
           }
-          this.addColumn(resolved.tableName, resolved.columnName)
+          this.addSelectedColumn(resolved.tableName, resolved.columnName)
         }
         break
       }
       case 'SelectAllNode': {
-        this.widenAllTablesOrAll()
+        this.widenAllQueriedSelection()
         break
       }
       case 'AliasNode': {
@@ -235,18 +223,17 @@ class SelectMaskBuilder<DB = any> {
         break
       }
       default:
-        // Raw SQL or opaque expression — we can't know which columns/tables
         this.selectAll = true
         break
     }
   }
 
-  private widenAllTablesOrAll(): void {
-    if (this.tables.size === 0) {
+  private widenAllQueriedSelection(): void {
+    if (this.queriedTables.size === 0) {
       this.selectAll = true
       return
     }
-    for (const name of this.tables.keys()) this.widenTable(name)
+    for (const name of this.queriedTables) this.widenSelectedTable(name)
   }
 
   private resolveColumnRef(
@@ -258,8 +245,8 @@ class SelectMaskBuilder<DB = any> {
       const resolved = this.resolveTableName(getTableName(ref.table as TableNode))
       return { tableName: resolved, columnName }
     }
-    if (this.tables.size === 1) {
-      const [name] = this.tables.keys()
+    if (this.queriedTables.size === 1) {
+      const [name] = this.queriedTables
       return { tableName: name!, columnName }
     }
     return undefined
@@ -268,41 +255,91 @@ class SelectMaskBuilder<DB = any> {
   // ---------- Matchers ----------
 
   private buildMatchers(node: SelectQueryNode): MaskMatcher[] {
-    let matchers: MaskMatcher[] = node.where
-      ? this.toDNF(node.where.where)
-      : [this.allQueriedTables()]
+    let conjuncts: Conjunct[]
+    if (node.where) {
+      conjuncts = this.toDNF(node.where.where)
+    } else {
+      // No WHERE: rows from any selected table are in scope.
+      conjuncts = [{ kind: 'tables-all', tables: [...this.selectedTables.keys()] }]
+    }
+
     if (node.having) {
-      // HAVING operates on groupings and is hard to reason about — widen safely
-      // to all tables the query touches.
-      const widest = this.allQueriedTables()
-      const alreadyWidest = matchers.some(m => this.isAtLeastAsWide(m, widest))
-      if (!alreadyWidest) matchers = [...matchers, widest]
+      // HAVING operates on groupings and isn't cleanly row-level; widen to
+      // all queried tables (unless we already have an equally-wide conjunct).
+      const havingWidth = [...this.queriedTables]
+      const alreadyWide = conjuncts.some(
+        c => c.kind === 'tables-all' && this.covers(c.tables, havingWidth),
+      )
+      if (!alreadyWide) conjuncts.push({ kind: 'tables-all', tables: havingWidth })
     }
-    return matchers
+
+    const matchers: MaskMatcher[] = []
+    for (const c of conjuncts) this.emitMatchers(c, matchers)
+    matchers.push(...this.subqueryMatchers)
+    return this.dedupMatchers(matchers)
   }
 
-  // Matcher covering any row of any table this query references.
-  // Used as the safe-but-scoped fallback instead of `{type:'all'}`.
-  private allQueriedTables(): MaskMatcher {
-    if (this.tables.size === 0) return { type: 'all' }
-    const tables: Record<string, MaskMatcherTable<any>> = {}
-    for (const name of this.tables.keys()) tables[name] = { type: 'all' }
-    return { type: 'narrow', tables }
-  }
-
-  private isAtLeastAsWide(a: MaskMatcher, b: MaskMatcher): boolean {
-    if (a.type === 'all') return true
-    if (b.type === 'all') return false
-    for (const [name, bt] of Object.entries(b.tables)) {
-      const at = a.tables[name]
-      if (!at) return false
-      if (at.type === 'all') continue
-      if (bt!.type === 'all') return false
-    }
+  private covers(a: string[], b: string[]): boolean {
+    const s = new Set(a)
+    for (const t of b) if (!s.has(t)) return false
     return true
   }
 
-  private toDNF(node: OperationNode): MaskMatcher[] {
+  private emitMatchers(c: Conjunct, out: MaskMatcher[]): void {
+    if (c.kind === 'tables-all') {
+      if (c.tables.length === 0) {
+        out.push({ type: 'all' })
+        return
+      }
+      for (const t of c.tables) {
+        out.push({ type: 'narrow', table: t as any, match: { type: 'all' } })
+      }
+      return
+    }
+    const affected = new Set<string>(c.perTable.keys())
+    if (c.unqualified.size > 0) {
+      for (const t of this.queriedTables) affected.add(t)
+    }
+    if (affected.size === 0) {
+      // Nothing to match on — fall back to queried scope.
+      if (this.queriedTables.size === 0) {
+        out.push({ type: 'all' })
+      } else {
+        for (const t of this.queriedTables) {
+          out.push({ type: 'narrow', table: t as any, match: { type: 'all' } })
+        }
+      }
+      return
+    }
+    for (const t of affected) {
+      const columns: Record<string, MaskMatcherColumn> = {}
+      const tableCols = c.perTable.get(t)
+      if (tableCols) for (const [col, v] of tableCols) columns[col] = v
+      for (const [col, v] of c.unqualified) {
+        const existing = columns[col]
+        columns[col] = existing ? this.andMergeColumn(existing, v) : v
+      }
+      out.push({
+        type: 'narrow',
+        table: t as any,
+        match: { type: 'narrow', columns },
+      })
+    }
+  }
+
+  private dedupMatchers(matchers: MaskMatcher[]): MaskMatcher[] {
+    const seen = new Set<string>()
+    const out: MaskMatcher[] = []
+    for (const m of matchers) {
+      const key = JSON.stringify(m)
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(m)
+    }
+    return out
+  }
+
+  private toDNF(node: OperationNode): Conjunct[] {
     switch (node.kind) {
       case 'AndNode': {
         const n = node as AndNode
@@ -319,39 +356,57 @@ class SelectMaskBuilder<DB = any> {
         return [this.processBinaryOp(node as BinaryOperationNode)]
       }
       default:
-        // Raw SQL / unrecognized predicate — could reference any column of any queried table.
-        return [this.allQueriedTables()]
+        // Raw SQL / unrecognized predicate — could touch any queried table.
+        return [{ kind: 'tables-all', tables: [...this.queriedTables] }]
     }
   }
 
-  private crossAnd(a: MaskMatcher[], b: MaskMatcher[]): MaskMatcher[] {
-    const out: MaskMatcher[] = []
+  private crossAnd(a: Conjunct[], b: Conjunct[]): Conjunct[] {
+    const out: Conjunct[] = []
     for (const x of a) for (const y of b) out.push(this.andMerge(x, y))
     return out
   }
 
-  private andMerge(a: MaskMatcher, b: MaskMatcher): MaskMatcher {
-    if (a.type === 'all') return b
-    if (b.type === 'all') return a
-    const tables: Record<string, MaskMatcherTable<any>> = {}
-    for (const [name, t] of Object.entries(a.tables)) tables[name] = t!
-    for (const [name, t] of Object.entries(b.tables)) {
-      const existing = tables[name]
-      tables[name] = existing ? this.andMergeTable(existing, t!) : t!
+  private andMerge(a: Conjunct, b: Conjunct): Conjunct {
+    // AND identity: a "tables-all" scoped to the queried tables is basically
+    // "any row" — it doesn't constrain, so the narrow side wins.
+    const aIsIdentity = a.kind === 'tables-all' && this.covers(a.tables, [...this.queriedTables])
+    const bIsIdentity = b.kind === 'tables-all' && this.covers(b.tables, [...this.queriedTables])
+    if (aIsIdentity) return b
+    if (bIsIdentity) return a
+    if (a.kind === 'tables-all' || b.kind === 'tables-all') {
+      // Neither is identity but one is tables-all — widen to union.
+      const tables = new Set<string>()
+      const addFrom = (c: Conjunct) => {
+        if (c.kind === 'tables-all') for (const t of c.tables) tables.add(t)
+        else {
+          for (const t of c.perTable.keys()) tables.add(t)
+          if (c.unqualified.size > 0) for (const t of this.queriedTables) tables.add(t)
+        }
+      }
+      addFrom(a)
+      addFrom(b)
+      return { kind: 'tables-all', tables: [...tables] }
     }
-    return { type: 'narrow', tables }
-  }
-
-  private andMergeTable(a: MaskMatcherTable<any>, b: MaskMatcherTable<any>): MaskMatcherTable<any> {
-    if (a.type === 'all') return b
-    if (b.type === 'all') return a
-    const columns: Record<string, MaskMatcherColumn> = {}
-    for (const [name, c] of Object.entries(a.columns)) columns[name] = c!
-    for (const [name, c] of Object.entries(b.columns)) {
-      const existing = columns[name]
-      columns[name] = existing ? this.andMergeColumn(existing, c!) : c!
+    const perTable = new Map<string, Map<string, MaskMatcherColumn>>()
+    for (const [t, cols] of a.perTable) perTable.set(t, new Map(cols))
+    for (const [t, cols] of b.perTable) {
+      const existing = perTable.get(t)
+      if (!existing) {
+        perTable.set(t, new Map(cols))
+        continue
+      }
+      for (const [col, v] of cols) {
+        const prev = existing.get(col)
+        existing.set(col, prev ? this.andMergeColumn(prev, v) : v)
+      }
     }
-    return { type: 'narrow', columns }
+    const unqualified = new Map(a.unqualified)
+    for (const [col, v] of b.unqualified) {
+      const prev = unqualified.get(col)
+      unqualified.set(col, prev ? this.andMergeColumn(prev, v) : v)
+    }
+    return { kind: 'narrow', perTable, unqualified }
   }
 
   private andMergeColumn(a: MaskMatcherColumn, b: MaskMatcherColumn): MaskMatcherColumn {
@@ -360,17 +415,25 @@ class SelectMaskBuilder<DB = any> {
     if (a.type === 'values' && b.type === 'values') {
       return { type: 'values', values: [...a.values, ...b.values] }
     }
-    // fields-involved merges shouldn't occur from AST; widen safely.
     return { type: 'all' }
   }
 
-  private processBinaryOp(node: BinaryOperationNode): MaskMatcher {
-    if (node.leftOperand.kind !== 'ReferenceNode') return this.allQueriedTables()
-    const ref = node.leftOperand as ReferenceNode
-    const resolved = this.resolveColumnRef(ref)
-    if (!resolved) return this.allQueriedTables()
+  private processBinaryOp(node: BinaryOperationNode): Conjunct {
+    // A subquery on the right side contributes its own read-matchers to the
+    // outer query (changes to rows the subquery reads can change the outer
+    // result). We still produce a conjunct for the left column below.
+    if (node.rightOperand.kind === 'SelectQueryNode') {
+      this.collectSubqueryMatchers(node.rightOperand as SelectQueryNode)
+    }
 
-    if (node.operator.kind !== 'OperatorNode') return this.allQueriedTables()
+    if (node.leftOperand.kind !== 'ReferenceNode') {
+      return { kind: 'tables-all', tables: [...this.queriedTables] }
+    }
+    const ref = node.leftOperand as ReferenceNode
+
+    if (node.operator.kind !== 'OperatorNode') {
+      return { kind: 'tables-all', tables: [...this.queriedTables] }
+    }
     const operator = (node.operator as OperatorNode).operator
 
     let column: MaskMatcherColumn
@@ -384,14 +447,73 @@ class SelectMaskBuilder<DB = any> {
       column = { type: 'all' }
     }
 
+    // Resolve the column. If qualified or single-queried-table → specific table.
+    // If unqualified in multi-table → record as unqualified (will apply to all
+    // queried tables at emit time).
+    if (ref.column.kind === 'SelectAllNode') {
+      return { kind: 'tables-all', tables: [...this.queriedTables] }
+    }
+    const columnName = (ref.column as ColumnNode).column.name
+
+    if (ref.table) {
+      const resolved = this.resolveTableName(getTableName(ref.table as TableNode))
+      const perTable = new Map<string, Map<string, MaskMatcherColumn>>()
+      perTable.set(resolved, new Map([[columnName, column]]))
+      return { kind: 'narrow', perTable, unqualified: new Map() }
+    }
+    if (this.queriedTables.size === 1) {
+      const [name] = this.queriedTables
+      const perTable = new Map<string, Map<string, MaskMatcherColumn>>()
+      perTable.set(name!, new Map([[columnName, column]]))
+      return { kind: 'narrow', perTable, unqualified: new Map() }
+    }
     return {
-      type: 'narrow',
-      tables: {
-        [resolved.tableName]: {
+      kind: 'narrow',
+      perTable: new Map(),
+      unqualified: new Map([[columnName, column]]),
+    }
+  }
+
+  private collectSubqueryMatchers(subNode: SelectQueryNode): void {
+    const sub = new SelectMaskBuilder<DB>().build(subNode)
+    // Convert the subquery's selection into per-table matchers: changes to
+    // columns the subquery reads can change its result, which can change ours.
+    if (sub.select.type === 'all') {
+      this.subqueryMatchers.push({ type: 'all' })
+      return
+    }
+    for (const [tableName, table] of Object.entries(sub.select.tables)) {
+      if (!table) continue
+      if ((table as MaskSelectionTable).type === 'all') {
+        this.subqueryMatchers.push({
           type: 'narrow',
-          columns: { [resolved.columnName]: column },
-        },
-      },
+          table: tableName as any,
+          match: { type: 'all' },
+        })
+        continue
+      }
+      const columns: Record<string, MaskMatcherColumn> = {}
+      const narrowTable = table as Extract<MaskSelectionTable, { type: 'narrow' }>
+      for (const col of Object.keys(narrowTable.columns)) columns[col] = { type: 'all' }
+      this.subqueryMatchers.push({
+        type: 'narrow',
+        table: tableName as any,
+        match: { type: 'narrow', columns },
+      })
+    }
+    // Subquery's own WHERE-derived matchers also propagate.
+    for (const m of sub.matchers) {
+      if (m.type === 'all') {
+        this.subqueryMatchers.push(m)
+        continue
+      }
+      // Skip wide "match any row of table T" matchers when we already have a
+      // narrower selection-based matcher for T.
+      const existingNarrow = this.subqueryMatchers.some(
+        em => em.type === 'narrow' && em.table === m.table && em.match.type === 'narrow',
+      )
+      if (m.match.type === 'all' && existingNarrow) continue
+      this.subqueryMatchers.push(m as any)
     }
   }
 
