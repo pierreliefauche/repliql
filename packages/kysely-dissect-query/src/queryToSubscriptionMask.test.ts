@@ -969,14 +969,6 @@ const tests: TestCase[] = [
       ],
     },
   },
-]
-
-// Tests below encode intended/ideal behavior for known gaps. They may fail
-// against the current implementation; that's expected — they pin the design
-// decisions until the code catches up.
-const pendingTests: TestCase[] = [
-  // ---- point 2: non-literal members inside an IN list ----
-  // REVIEW: FIX IT
   {
     it: 'IN list with a non-literal element → column widened to all',
     query: db
@@ -1001,7 +993,6 @@ const pendingTests: TestCase[] = [
       ],
     },
   },
-  // ---- point 3: dedup must not depend on column key insertion order ----
   {
     it: 'OR of two AND branches with same columns in different order should dedup',
     query: db
@@ -1034,8 +1025,6 @@ const pendingTests: TestCase[] = [
       ],
     },
   },
-  // ---- point 5: joined-but-unselected table should still produce a matcher ----
-  // REVIEW: FIX IT (i don't think it applies to left join though, for example.)
   {
     it: 'inner join where joined table is not selected still produces a matcher',
     query: db
@@ -1058,8 +1047,6 @@ const pendingTests: TestCase[] = [
       ],
     },
   },
-  // ---- point 6: coverage gaps ----
-  // REVIEW: FIX IT
   {
     it: 'NOT predicate over an equality → column widened to all',
     query: db
@@ -1084,7 +1071,6 @@ const pendingTests: TestCase[] = [
       ],
     },
   },
-  // REVIEW: FIX IT
   {
     it: 'subquery used as a table in FROM propagates inner tables',
     query: db.selectFrom(eb => eb.selectFrom('users').select('users.id').as('u')).select('u.id'),
@@ -1099,7 +1085,6 @@ const pendingTests: TestCase[] = [
       matchers: [{ type: 'narrow', table: 'users', match: { type: 'all' } }],
     },
   },
-  // REVIEW: FIX IT
   {
     it: 'CTE (WITH) — referenced base tables propagate to the outer mask',
     query: db
@@ -1132,14 +1117,6 @@ const pendingTests: TestCase[] = [
 
 describe('queryToSubscriptionMask', () => {
   for (const t of tests) {
-    it(t.it, () => {
-      expect(queryToSubscriptionMask<DB>(t.query)).toEqual(t.result)
-    })
-  }
-})
-
-describe('queryToSubscriptionMask (pending / known gaps)', () => {
-  for (const t of pendingTests) {
     it(t.it, () => {
       expect(queryToSubscriptionMask<DB>(t.query)).toEqual(t.result)
     })

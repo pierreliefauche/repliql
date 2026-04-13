@@ -1,3 +1,4 @@
+import { stableStringify } from '@repliql/utils'
 import type {
   AliasNode,
   AndNode,
@@ -7,7 +8,6 @@ import type {
   DeleteQueryNode,
   IdentifierNode,
   InsertQueryNode,
-  JoinNode,
   JoinType,
   OperationNode,
   OperationNodeKind,
@@ -437,7 +437,7 @@ class SelectMaskBuilder<DB = any> {
     const seen = new Set<string>()
     const out: MaskMatcher<DB>[] = []
     for (const m of matchers) {
-      const key = JSON.stringify(m)
+      const key = stableStringify(m)
       if (seen.has(key)) continue
       seen.add(key)
       out.push(m)
