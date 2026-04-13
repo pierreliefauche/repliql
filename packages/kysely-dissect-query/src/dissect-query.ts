@@ -70,11 +70,13 @@ type SelectionChildKind = 'ReferenceNode' | 'SelectAllNode' | 'AliasNode'
 // Node kinds we handle in WHERE expression walking
 type WhereExpressionKind = 'AndNode' | 'OrNode' | 'ParensNode' | 'BinaryOperationNode'
 
-function getTableName(node: TableNode): string {
+export function getTableName(node: TableNode): string {
   return node.table.identifier.name
 }
 
-function extractTableFromNode(node: OperationNode): { name: string; alias?: string } | undefined {
+export function extractTableFromNode(
+  node: OperationNode,
+): { name: string; alias?: string } | undefined {
   switch (node.kind) {
     case 'TableNode':
       return { name: getTableName(node as TableNode) }
@@ -95,7 +97,7 @@ function extractTableFromNode(node: OperationNode): { name: string; alias?: stri
   }
 }
 
-function extractTableNameFromWriteTarget<DB = any>(
+export function extractTableNameFromWriteTarget<DB = any>(
   node: OperationNode | undefined,
 ): (keyof DB & string) | undefined {
   if (!node) return undefined

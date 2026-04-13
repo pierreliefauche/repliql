@@ -6,3 +6,10 @@ export type {
   DissectedTable,
   DissectedWriteQuery,
 } from './dissect-query'
+export { queryToSubscriptionMask } from './queryToSubscriptionMask'
+export type {
+  MaskMatcher,
+  QueryMask,
+  ReadQueryMask,
+  WriteQueryMask,
+} from './queryToSubscriptionMask'

@@ -1,0 +1,897 @@
+import { describe, expect, it } from 'bun:test'
+
+import {
+  DummyDriver,
+  Kysely,
+  type OperationNodeSource,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+  sql,
+  type SqlBool,
+} from 'kysely'
+
+import { queryToSubscriptionMask, type QueryMask } from './queryToSubscriptionMask'
+
+interface Users {
+  id: number
+  name: string
+  age: number
+  deleted: boolean | null
+}
+
+interface Posts {
+  id: number
+  user_id: number
+  title: string
+  tag: string
+}
+
+interface Comments {
+  id: number
+  post_id: number
+  body: string
+}
+
+interface DB {
+  users: Users
+  posts: Posts
+  comments: Comments
+}
+
+const db = new Kysely<DB>({
+  dialect: {
+    createAdapter: () => new PostgresAdapter(),
+    createDriver: () => new DummyDriver(),
+    createIntrospector: d => new PostgresIntrospector(d),
+    createQueryCompiler: () => new PostgresQueryCompiler(),
+  },
+})
+
+type TestCase = {
+  it: string
+  query: OperationNodeSource
+  result: QueryMask<DB>
+}
+
+const tests: TestCase[] = [
+  // ---- selection basics ----
+  {
+    it: 'basic selectAll()',
+    query: db.selectFrom('users').selectAll(),
+    result: {
+      operation: 'select',
+      select: { type: 'narrow', tables: { users: { type: 'all' } } },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'select specific columns (unqualified, single table)',
+    query: db.selectFrom('users').select(['id', 'name']),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: {
+            type: 'narrow',
+            columns: { id: { type: 'all' }, name: { type: 'all' } },
+          },
+        },
+      },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'qualified columns',
+    query: db.selectFrom('users').select('users.id'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+        },
+      },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'single table, unqualified columns with > operator',
+    query: db.selectFrom('users').select(['id', 'name']).where('age', '>', 18),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: {
+            type: 'narrow',
+            columns: { id: { type: 'all' }, name: { type: 'all' } },
+          },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { age: { type: 'all' } },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'multiple tables with inner join',
+    query: db
+      .selectFrom('users')
+      .innerJoin('posts', 'posts.user_id', 'users.id')
+      .select(['users.id', 'posts.title']),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+          posts: { type: 'narrow', columns: { title: { type: 'all' } } },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+        },
+      ],
+    },
+  },
+  {
+    it: 'left join — table appears, ON columns skipped',
+    query: db.selectFrom('users').leftJoin('posts', 'posts.user_id', 'users.id').select('users.id'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+          // REVIEW: we're not returning anything from posts, is there a way to avoid it?
+          posts: { type: 'narrow', columns: {} },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          // REVIEW: if a post changes, this query result will not, right? Is there a way to avoid listing posts in matcher?
+          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+        },
+      ],
+    },
+  },
+  {
+    it: 'left join with unknown column in WHERE → matcher widened to all',
+    query: db
+      .selectFrom('users')
+      .leftJoin('posts', 'posts.user_id', 'users.id')
+      .select('users.id')
+      .where('age', '=', 34),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+          posts: { type: 'narrow', columns: {} },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          // REVIEW: we should narrow to column "age" no?
+          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+        },
+      ],
+    },
+  },
+  {
+    it: 'left join — select all',
+    query: db.selectFrom('users').leftJoin('posts', 'posts.user_id', 'users.id').selectAll(),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'all' },
+          posts: { type: 'all' },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+        },
+      ],
+    },
+  },
+  // ---- WHERE operators ----
+  {
+    it: 'WHERE with = operator',
+    query: db.selectFrom('users').select('id').where('name', '=', 'John'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { name: { type: 'values', values: ['John'] } },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'WHERE with in operator',
+    query: db.selectFrom('users').select('id').where('name', 'in', ['Alice', 'Bob']),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { name: { type: 'values', values: ['Alice', 'Bob'] } },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'WHERE with > operator → column type all',
+    query: db.selectFrom('users').select('id').where('age', '>', 18),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: { type: 'narrow', columns: { age: { type: 'all' } } },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'WHERE with is operator → column type all',
+    query: db.selectFrom('users').select('id').where('deleted', 'is', null),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: { type: 'narrow', columns: { deleted: { type: 'all' } } },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'multiple WHERE (AND) — merged into one narrow matcher',
+    query: db.selectFrom('users').select('id').where('name', '=', 'John').where('age', '>', 18),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: {
+                name: { type: 'values', values: ['John'] },
+                age: { type: 'all' },
+              },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'multiple = on same column via AND — values accumulate',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where('name', '=', 'John')
+      .where('name', '=', 'Jane'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { name: { type: 'values', values: ['John', 'Jane'] } },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'unqualified column in multi-table query → matcher widened to all',
+    query: db
+      .selectFrom('users')
+      .innerJoin('posts', 'posts.user_id', 'users.id')
+      .select(['users.id', 'posts.title'])
+      .where('age', '>', 18),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+          posts: { type: 'narrow', columns: { title: { type: 'all' } } },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          // REVIEW: same we can probably narrow to column "age" no?
+          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+        },
+      ],
+    },
+  },
+  {
+    it: 'column alias — select(users.id as uid)',
+    query: db.selectFrom('users').select('users.id as uid'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+        },
+      },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'table alias — selectFrom(users as u).select(u.id)',
+    query: db.selectFrom('users as u').select('u.id'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+        },
+      },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'table alias in WHERE',
+    query: db.selectFrom('users as u').select('u.id').where('u.name', '=', 'John'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { name: { type: 'values', values: ['John'] } },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'selectAll(users) — widen users only',
+    query: db
+      .selectFrom('users')
+      .innerJoin('posts', 'posts.user_id', 'users.id')
+      .selectAll('users'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'all' },
+          // REVIEW: We don't select anything from posts, so should it be here at all?
+          posts: { type: 'narrow', columns: {} },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          // REVIEW: should posts be listed? since it's not used in any way, no selection or WHERE
+          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+        },
+      ],
+    },
+  },
+  {
+    it: 'bare selectAll() with multiple tables — widen all',
+    query: db.selectFrom('users').innerJoin('posts', 'posts.user_id', 'users.id').selectAll(),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'all' },
+          posts: { type: 'all' },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+        },
+      ],
+    },
+  },
+  {
+    it: 'WHERE subquery — column widened to all, table+column scope preserved',
+    query: db
+      .selectFrom('users')
+      .select('users.id')
+      .where('users.id', 'in', db.selectFrom('posts').select('posts.user_id')),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          // REVIEW: here though posts should be present, because if a post changes the result of the query would change potentially
+          // and it matches user_id column on posts
+          tables: {
+            users: { type: 'narrow', columns: { id: { type: 'all' } } },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'README-like combined example',
+    query: db
+      .selectFrom('users')
+      .innerJoin('posts', 'posts.user_id', 'users.id')
+      .select(['users.id', 'posts.title'])
+      .where('age', '>', 18)
+      .where('users.name', '=', 'John')
+      .where('posts.tag', 'in', ['news', 'archive']),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+          posts: { type: 'narrow', columns: { title: { type: 'all' } } },
+        },
+      },
+      // `age` is unqualified in multi-table → its conjunct is {type:all} (identity of AND);
+      // the other two narrow predicates merge into a single matcher.
+      matchers: [
+        {
+          type: 'narrow',
+          // REVIEW: age should be included in all tables, since we don't know where it is from
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { name: { type: 'values', values: ['John'] } },
+            },
+            posts: {
+              type: 'narrow',
+              columns: { tag: { type: 'values', values: ['news', 'archive'] } },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'select with multiple froms',
+    query: db.selectFrom(['users', 'posts']).select(['users.id', 'posts.title']),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { id: { type: 'all' } } },
+          posts: { type: 'narrow', columns: { title: { type: 'all' } } },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+        },
+      ],
+    },
+  },
+  {
+    it: 'column both selected and filtered with =',
+    query: db.selectFrom('users').select('name').where('name', '=', 'John'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { name: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { name: { type: 'values', values: ['John'] } },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'column both selected and filtered with unknown operator',
+    query: db.selectFrom('users').select('age').where('age', '>', 18),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { age: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: { type: 'narrow', columns: { age: { type: 'all' } } },
+          },
+        },
+      ],
+    },
+  },
+  // ---- OR / DNF ----
+  {
+    it: 'OR of two eq predicates → two matchers',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.or([eb('name', '=', 'John'), eb('name', '=', 'Jane')])),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { name: { type: 'values', values: ['John'] } },
+            },
+          },
+        },
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { name: { type: 'values', values: ['Jane'] } },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: '(a=1 AND b=2) OR c=3 → two matchers',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb =>
+        eb.or([eb.and([eb('name', '=', 'John'), eb('age', '=', 30)]), eb('deleted', '=', true)]),
+      ),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: {
+                name: { type: 'values', values: ['John'] },
+                age: { type: 'values', values: [30] },
+              },
+            },
+          },
+        },
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { deleted: { type: 'values', values: [true] } },
+            },
+          },
+        },
+      ],
+    },
+  },
+  // ---- writes ----
+  {
+    it: 'insert query',
+    query: db.insertInto('users').values({ id: 1, name: 'John', age: 30, deleted: false }),
+    result: { operation: 'insert', table: 'users' },
+  },
+  {
+    it: 'update query',
+    query: db.updateTable('users').set({ name: 'Jane' }).where('id', '=', 1),
+    result: { operation: 'update', table: 'users' },
+  },
+  {
+    it: 'delete query',
+    query: db.deleteFrom('users').where('id', '=', 1),
+    result: { operation: 'delete', table: 'users' },
+  },
+  // ---- raw SQL ----
+  {
+    it: 'raw sql in SELECT → selection widened to all',
+    query: db
+      .selectFrom('users')
+      .select(['users.id', sql<string>`concat(first_name, ' ', last_name)`.as('full_name')]),
+    result: {
+      operation: 'select',
+      select: { type: 'all' },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'raw sql left operand in WHERE → matcher widened to all',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(sql`lower(name)`, '=', 'john'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'raw sql as full WHERE expression → matcher all',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(sql<SqlBool>`name ILIKE '%john%'`),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'raw sql on right side of = → column type all',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where('name', '=', sql<string>`lower('JOHN')`),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: { type: 'narrow', columns: { name: { type: 'all' } } },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'raw sql on right side of in → column type all',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where('name', 'in', sql<string>`(select name from admins)`),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: { type: 'narrow', columns: { name: { type: 'all' } } },
+          },
+        },
+      ],
+    },
+  },
+  {
+    it: 'regular columns alongside raw sql in SELECT → selection all',
+    query: db
+      .selectFrom('users')
+      .select(['users.id', 'users.name', sql<number>`extract(year from created_at)`.as('year')]),
+    result: {
+      operation: 'select',
+      select: { type: 'all' },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'raw sql in WHERE mixed with eq filter → matcher all (AND identity keeps narrow branch)',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where('name', '=', 'John')
+      .where(sql<SqlBool>`age > 18`),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { id: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { name: { type: 'values', values: ['John'] } },
+            },
+          },
+        },
+      ],
+    },
+  },
+  // ---- HAVING ----
+  {
+    it: 'HAVING present → matchers include {type:all}',
+    query: db.selectFrom('users').select('age').groupBy('age').having('age', '=', 25),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { age: { type: 'all' } } } },
+      },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'WHERE + HAVING — WHERE narrow matcher kept, extra all matcher added',
+    query: db
+      .selectFrom('users')
+      .select('age')
+      .where('name', '=', 'John')
+      .groupBy('age')
+      .having('age', '>', 18),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'narrow', columns: { age: { type: 'all' } } } },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: {
+            users: {
+              type: 'narrow',
+              columns: { name: { type: 'values', values: ['John'] } },
+            },
+          },
+        },
+        {
+          type: 'narrow',
+          tables: { users: { type: 'all' } },
+        },
+      ],
+    },
+  },
+  {
+    it: 'HAVING without GROUP BY',
+    query: db.selectFrom('users').selectAll().having('deleted', '=', false),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: { users: { type: 'all' } },
+      },
+      matchers: [{ type: 'narrow', tables: { users: { type: 'all' } } }],
+    },
+  },
+  {
+    it: 'HAVING in multi-table query with join',
+    query: db
+      .selectFrom('users')
+      .innerJoin('posts', 'posts.user_id', 'users.id')
+      .select(['users.name', 'posts.tag'])
+      .groupBy(['users.name', 'posts.tag'])
+      .having('posts.tag', '=', 'featured'),
+    result: {
+      operation: 'select',
+      select: {
+        type: 'narrow',
+        tables: {
+          users: { type: 'narrow', columns: { name: { type: 'all' } } },
+          posts: { type: 'narrow', columns: { tag: { type: 'all' } } },
+        },
+      },
+      matchers: [
+        {
+          type: 'narrow',
+          tables: { users: { type: 'all' }, posts: { type: 'all' } },
+        },
+      ],
+    },
+  },
+]
+
+describe('queryToSubscriptionMask', () => {
+  for (const t of tests) {
+    it(t.it, () => {
+      expect(queryToSubscriptionMask<DB>(t.query)).toEqual(t.result)
+    })
+  }
+})
