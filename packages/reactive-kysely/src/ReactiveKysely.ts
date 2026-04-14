@@ -107,7 +107,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
 
         // Build JSON object expression for all columns
         function toJson(prefix: 'NEW' | 'OLD') {
-          return `json_object(${(columns as string[]).map(col => `'${col}', "${prefix}"."${col}"`).join(', ')}`
+          return `json_object(${(columns as string[]).map(col => `'${col}', "${prefix}"."${col}"`).join(', ')})`
         }
 
         await this.createCallbackFunction(fnName, callback)
@@ -191,6 +191,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
       return pipe(
         updatesSource,
         filter(rowUpdate => isChangeSubscriptionUpdate(compiledChangeSubscription, rowUpdate)),
+        share,
       )
     })
   }
@@ -216,6 +217,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
           lastSeenDataHash = phash(stableStringify(data))
           return previousDataHash !== lastSeenDataHash
         }),
+        share,
       )
     }) as Source<Result[]>
   }
