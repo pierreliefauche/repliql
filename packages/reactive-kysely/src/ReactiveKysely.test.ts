@@ -393,7 +393,7 @@ describe('ReactiveKysely — advanced queries (JSON fields)', () => {
 
     const query = db
       .selectFrom('users')
-      .selectAll()
+      .select('age')
       .where(sql<SqlBool>`json_extract(metadata, '$.tier') = 'pro'`)
 
     const { unsubscribe } = collect(db.liveQuery(query))
@@ -402,7 +402,34 @@ describe('ReactiveKysely — advanced queries (JSON fields)', () => {
     db.executeQueryCount = 0
     await db.updateTable('users').set({ age: 31 }).where('id', '=', 1).execute()
     await flush()
-    expect(db.executeQueryCount).toBeGreaterThanOrEqual(1)
+    expect(db.executeQueryCount).toBe(1)
+
+    unsubscribe()
+  })
+
+  it('does NOT conservatively refetches on any users change when WHERE uses raw JSON IF the selection has not changed', async () => {
+    await db
+      .insertInto('users')
+      .values({
+        id: 1,
+        name: 'alice',
+        age: 30,
+        metadata: JSON.stringify({ tier: 'pro' }),
+      })
+      .execute()
+
+    const query = db
+      .selectFrom('users')
+      .select(['id', 'name', 'metadata'])
+      .where(sql<SqlBool>`json_extract(metadata, '$.tier') = 'pro'`)
+
+    const { unsubscribe } = collect(db.liveQuery(query))
+    await flush()
+
+    db.executeQueryCount = 0
+    await db.updateTable('users').set({ age: 31 }).where('id', '=', 1).execute()
+    await flush()
+    expect(db.executeQueryCount).toBe(0)
 
     unsubscribe()
   })
