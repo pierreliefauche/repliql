@@ -26,7 +26,7 @@ import type {
   ValueNode,
 } from 'kysely'
 
-type MaskSelectionColumn =
+export type MaskSelectionColumn =
   | { type: 'all' }
   | {
       type: 'narrow'
@@ -35,7 +35,7 @@ type MaskSelectionColumn =
       }
     }
 
-type MaskSelectionTable<TableSchema = any> =
+export type MaskSelectionTable<TableSchema = any> =
   | { type: 'all' }
   | {
       type: 'narrow'
@@ -44,7 +44,7 @@ type MaskSelectionTable<TableSchema = any> =
       }
     }
 
-type MaskSelection<DB = any> =
+export type MaskSelection<DB = any> =
   | { type: 'all' }
   | {
       type: 'narrow'
@@ -53,9 +53,9 @@ type MaskSelection<DB = any> =
       }
     }
 
-type MaskMatcherField = { type: 'all' } | { type: 'narrow'; values: unknown[] }
+export type MaskMatcherField = { type: 'all' } | { type: 'narrow'; values: unknown[] }
 
-type MaskMatcherColumn =
+export type MaskMatcherColumn =
   | { type: 'all' }
   | { type: 'values'; values: unknown[] }
   | {
@@ -65,7 +65,7 @@ type MaskMatcherColumn =
       }
     }
 
-type MaskMatcherTable<TableSchema> =
+export type MaskMatcherTable<TableSchema = any> =
   | { type: 'all' }
   | {
       type: 'narrow'
