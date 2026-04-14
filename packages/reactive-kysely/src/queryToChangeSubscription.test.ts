@@ -19,6 +19,14 @@ interface Users {
   name: string
   age: number
   deleted: boolean | null
+  metadata: {
+    referral: string | null
+    didSignTnC: boolean
+    timestamps: {
+      loginAt: number | null
+      createdAt: number
+    }
+  }
 }
 
 interface Posts {
@@ -125,6 +133,7 @@ const tests: TestCase[] = [
       selection: { users: { id: true } },
       filter: {
         users: [{ age: { $in: [34] } }],
+        // @ts-ignore
         posts: [{ age: { $in: [34] } }],
       },
     },
@@ -208,6 +217,7 @@ const tests: TestCase[] = [
       },
       filter: {
         users: [{ age: MATCH_ALL }],
+        // @ts-ignore
         posts: [{ age: MATCH_ALL }],
       },
     },
@@ -285,6 +295,7 @@ const tests: TestCase[] = [
       },
       filter: {
         users: [{ age: MATCH_ALL, name: { $in: ['John'] } }],
+        // @ts-ignore
         posts: [{ age: MATCH_ALL, tag: { $in: ['news', 'archive'] } }],
       },
     },
@@ -344,17 +355,26 @@ const tests: TestCase[] = [
     result: {
       selection: { users: { id: true } },
       filter: {
-        users: [
-          { name: { $in: ['John'] }, age: { $in: [30] } },
-          { deleted: { $in: [true] } },
-        ],
+        users: [{ name: { $in: ['John'] }, age: { $in: [30] } }, { deleted: { $in: [true] } }],
       },
     },
   },
   // ---- writes ----
   {
     it: 'insert query → undefined',
-    query: db.insertInto('users').values({ id: 1, name: 'John', age: 30, deleted: false }),
+    query: db.insertInto('users').values([
+      {
+        id: 1,
+        name: 'John',
+        age: 30,
+        deleted: false,
+        metadata: {
+          referral: null,
+          timestamps: { loginAt: null, createdAt: 32 },
+          didSignTnC: false,
+        },
+      },
+    ]),
     result: undefined,
   },
   {
@@ -581,6 +601,196 @@ const tests: TestCase[] = [
       filter: {
         users: [{ deleted: { $in: [false] } }],
       },
+    },
+  },
+  {
+    it: 'JSON column',
+    query: db
+      .selectFrom('users')
+      .select('name')
+      .select(eb => eb.ref('metadata', '->').key('referral').as('refer'))
+      .select(eb => eb.ref('metadata', '->').key('timestamps').key('loginAt').as('lat'))
+      .where('age', '=', 34)
+      .where(eb => eb.ref('metadata', '->').key('didSignTnC'), '=', true)
+      .where(eb => eb.ref('metadata', '->').key('timestamps').key('createdAt'), '>', 457),
+    result: {
+      filter: {
+        users: [
+          {
+            age: { $in: [34] },
+            metadata: {
+              didSignTnC: { $in: [true] },
+              timestamps: MATCH_ALL,
+            },
+          },
+        ],
+      },
+      selection: {
+        users: {
+          name: true,
+          metadata: {
+            referral: true,
+            timestamps: true,
+          },
+        },
+      },
+    },
+  },
+  {
+    it: 'JSON selection only — no WHERE',
+    query: db
+      .selectFrom('users')
+      .select(eb => eb.ref('metadata', '->').key('referral').as('refer')),
+    result: {
+      selection: { users: { metadata: { referral: true } } },
+      filter: { users: MATCH_ALL },
+    },
+  },
+  {
+    it: 'deep JSON selection collapses to first key',
+    query: db
+      .selectFrom('users')
+      .select(eb => eb.ref('metadata', '->').key('timestamps').key('loginAt').as('x')),
+    result: {
+      selection: { users: { metadata: { timestamps: true } } },
+      filter: { users: MATCH_ALL },
+    },
+  },
+  {
+    it: 'JSON selection merges with whole-column selection to true',
+    query: db
+      .selectFrom('users')
+      .select('metadata')
+      .select(eb => eb.ref('metadata', '->').key('referral').as('refer')),
+    result: {
+      selection: { users: { metadata: true } },
+      filter: { users: MATCH_ALL },
+    },
+  },
+  {
+    it: 'JSON = WHERE without matching SELECT',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('didSignTnC'), '=', true),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ metadata: { didSignTnC: { $in: [true] } } }] },
+    },
+  },
+  {
+    it: 'JSON in WHERE',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('referral'), 'in', ['alice', 'bob']),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ metadata: { referral: { $in: ['alice', 'bob'] } } }] },
+    },
+  },
+  {
+    it: 'JSON > WHERE widens field to MATCH_ALL',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('didSignTnC'), '>', 0),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ metadata: { didSignTnC: MATCH_ALL } }] },
+    },
+  },
+  {
+    it: 'NOT over JSON = widens field value',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.not(eb(eb.ref('metadata', '->').key('didSignTnC'), '=', true))),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ metadata: MATCH_ALL }] },
+    },
+  },
+  {
+    it: 'OR of two JSON eqs on different fields → two filter entries',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb =>
+        eb.or([
+          eb(eb.ref('metadata', '->').key('didSignTnC'), '=', true),
+          eb(eb.ref('metadata', '->').key('referral'), '=', 'alice'),
+        ]),
+      ),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [
+          { metadata: { didSignTnC: { $in: [true] } } },
+          { metadata: { referral: { $in: ['alice'] } } },
+        ],
+      },
+    },
+  },
+  {
+    it: 'AND of two JSON WHEREs on different fields → merged into one entry',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('didSignTnC'), '=', true)
+      .where(eb => eb.ref('metadata', '->').key('referral'), '=', 'alice'),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [
+          {
+            metadata: {
+              didSignTnC: { $in: [true] },
+              referral: { $in: ['alice'] },
+            },
+          },
+        ],
+      },
+    },
+  },
+  {
+    it: 'AND of two JSON eqs on same field → $in accumulates',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('referral'), '=', 'alice')
+      .where(eb => eb.ref('metadata', '->').key('referral'), '=', 'bob'),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [{ metadata: { referral: { $in: ['alice', 'bob'] } } }],
+      },
+    },
+  },
+  {
+    it: 'qualified JSON ref on joined table lands on that table',
+    query: db
+      .selectFrom('users')
+      .innerJoin('posts', 'posts.user_id', 'users.id')
+      .select('posts.id')
+      .where(eb => eb.ref('users.metadata', '->').key('didSignTnC'), '=', true),
+    result: {
+      selection: { posts: { id: true } },
+      filter: {
+        users: [{ metadata: { didSignTnC: { $in: [true] } } }],
+        posts: MATCH_ALL,
+      },
+    },
+  },
+  {
+    it: '->> operator — operator-agnostic handling',
+    query: db
+      .selectFrom('users')
+      .select(eb => eb.ref('metadata', '->>').key('referral').as('r'))
+      .where(eb => eb.ref('metadata', '->>').key('referral'), '=', 'alice'),
+    result: {
+      selection: { users: { metadata: { referral: true } } },
+      filter: { users: [{ metadata: { referral: { $in: ['alice'] } } }] },
     },
   },
 ]

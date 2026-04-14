@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import {
   MATCH_ALL,
+  changeSubscriptionTables,
   initChangeSubscription,
   matchAll,
   matchAllTable,
@@ -491,5 +492,73 @@ describe('composition', () => {
     const c = matchTable(b, 'users', { id: { $in: [1] } })
     expect(b).not.toBe(a)
     expect(c).not.toBe(b)
+  })
+})
+
+describe('changeSubscriptionTables', () => {
+  it('returns an empty array for an empty subscription', () => {
+    expect(changeSubscriptionTables(initChangeSubscription<DB>())).toEqual([])
+  })
+
+  it('returns MATCH_ALL when the filter is MATCH_ALL', () => {
+    const sub = matchAll(initChangeSubscription<DB>())
+    expect(changeSubscriptionTables(sub)).toBe(MATCH_ALL)
+  })
+
+  it('returns MATCH_ALL when the selection is globally true', () => {
+    const sub = selectAll(initChangeSubscription<DB>())
+    expect(changeSubscriptionTables(sub)).toBe(MATCH_ALL)
+  })
+
+  it('returns MATCH_ALL when both filter and selection are wide', () => {
+    const sub = matchAll(selectAll(initChangeSubscription<DB>()))
+    expect(changeSubscriptionTables(sub)).toBe(MATCH_ALL)
+  })
+
+  it('returns tables referenced only by filter', () => {
+    const sub = matchTable(initChangeSubscription<DB>(), 'users', {
+      id: { $in: [1] },
+    })
+    expect(changeSubscriptionTables(sub)).toEqual(['users'])
+  })
+
+  it('returns tables referenced only by selection', () => {
+    const sub = selectTable(initChangeSubscription<DB>(), 'posts', {
+      title: true,
+    })
+    expect(changeSubscriptionTables(sub)).toEqual(['posts'])
+  })
+
+  it('includes tables whose filter is MATCH_ALL at the table level', () => {
+    const sub = matchAllTable(initChangeSubscription<DB>(), 'users')
+    expect(changeSubscriptionTables(sub)).toEqual(['users'])
+  })
+
+  it('includes tables whose selection is true at the table level', () => {
+    const sub = selectAllTable(initChangeSubscription<DB>(), 'users')
+    expect(changeSubscriptionTables(sub)).toEqual(['users'])
+  })
+
+  it('dedupes tables referenced by both filter and selection', () => {
+    let sub = initChangeSubscription<DB>()
+    sub = matchTable(sub, 'users', { id: { $in: [1] } })
+    sub = selectTable(sub, 'users', { name: true })
+    expect(changeSubscriptionTables(sub)).toEqual(['users'])
+  })
+
+  it('returns the union of filter and selection tables', () => {
+    let sub = initChangeSubscription<DB>()
+    sub = matchTable(sub, 'users', { id: { $in: [1] } })
+    sub = selectTable(sub, 'posts', { title: true })
+    const tables = changeSubscriptionTables(sub)
+    expect(tables).not.toBe(MATCH_ALL)
+    expect([...(tables as string[])].sort()).toEqual(['posts', 'users'])
+  })
+
+  it('dedupes across multiple filter entries on the same table', () => {
+    let sub = initChangeSubscription<DB>()
+    sub = matchTable(sub, 'users', { id: { $in: [1] } })
+    sub = matchTable(sub, 'users', { id: { $in: [2] } })
+    expect(changeSubscriptionTables(sub)).toEqual(['users'])
   })
 })

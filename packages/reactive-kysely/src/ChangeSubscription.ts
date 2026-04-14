@@ -2,7 +2,7 @@ import { type Primitive } from '@repliql/utils'
 
 import { AnyTable } from './types'
 
-export const MATCH_ALL = Symbol()
+export const MATCH_ALL = '*'
 type MatchAll = typeof MATCH_ALL
 
 type TableColumnsSelection<DB, Table extends AnyTable<DB>> = {
@@ -128,4 +128,19 @@ export function matchAllTable<DB, Table extends AnyTable<DB>>(
 
 export function matchAll<DB>(sub: ChangeSubscription<DB>): ChangeSubscription<DB> {
   return { ...sub, filter: MATCH_ALL }
+}
+
+export function changeSubscriptionTables<DB>(
+  sub: ChangeSubscription<DB>,
+): MatchAll | AnyTable<DB>[] {
+  if (sub.filter === MATCH_ALL || sub.selection === true) {
+    return MATCH_ALL
+  }
+
+  return [
+    ...new Set([
+      ...(Object.keys(sub.filter) as AnyTable<DB>[]),
+      ...(Object.keys(sub.selection) as AnyTable<DB>[]),
+    ]),
+  ]
 }

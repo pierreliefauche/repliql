@@ -32,10 +32,11 @@
     "test:watch": "bun test ./src/**/*.test.ts ./src/*.test.ts --watch"
   },
   "dependencies": {
-    "@repliql/utils": "workspace:*"
+    "@repliql/utils": "workspace:*",
+    "wonka": "catalog:"
   },
   "devDependencies": {},
   "peerDependencies": {
-    "kysely": "^0.28.16"
+    "kysely": "catalog:"
   }
 }

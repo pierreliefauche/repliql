@@ -1,7 +1,11 @@
 {
   "name": "@repliql/utils",
   "version": "0.0.1",
+  "files": [
+    "dist"
+  ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "exports": {
@@ -11,8 +15,6 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
-  "sideEffects": false,
   "scripts": {
     "build": "bun run build:esm && bun run build:cjs && bun run build:types",
     "build:cjs": "bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify",
@@ -24,5 +26,8 @@
   },
   "dependencies": {
     "@solana/fast-stable-stringify": "^6.8.0"
+  },
+  "devDependencies": {
+    "wonka": "catalog:"
   }
 }

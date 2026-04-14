@@ -34,6 +34,28 @@ import {
   selectTable,
 } from './ChangeSubscription'
 
+interface JSONReferenceNode extends OperationNode {
+  readonly kind: 'JSONReferenceNode'
+  readonly reference: ReferenceNode
+  readonly traversal: OperationNode
+}
+
+interface JSONOperatorChainNode extends OperationNode {
+  readonly kind: 'JSONOperatorChainNode'
+  readonly values: readonly ValueNode[]
+}
+
+interface JSONPathLegNode extends OperationNode {
+  readonly kind: 'JSONPathLegNode'
+  readonly type: 'Member' | 'ArrayLocation'
+  readonly value: string | number
+}
+
+interface JSONPathNode extends OperationNode {
+  readonly kind: 'JSONPathNode'
+  readonly pathLegs: ReadonlyArray<JSONPathLegNode>
+}
+
 type RootQueryNodeKind =
   | 'SelectQueryNode'
   | 'InsertQueryNode'
@@ -42,18 +64,24 @@ type RootQueryNodeKind =
 
 type NonRootQueryNodeKind = Exclude<OperationNodeKind, RootQueryNodeKind>
 
-type ValueMatch = typeof MATCH_ALL | { $in: Primitive[] }
+type ScalarMatch = typeof MATCH_ALL | { $in: Primitive[] }
+type ColumnMatch = ScalarMatch | { [field: string]: ScalarMatch }
 
 // Loose views of ChangeSubscription.{selection,filter} that we can iterate
 // generically regardless of the DB type parameter.
 type LooseSelection = Record<string, true | Record<string, true | Record<string, true>> | undefined>
 type LooseFilter = Record<
   string,
-  typeof MATCH_ALL | Record<string, ValueMatch>[] | undefined
+  typeof MATCH_ALL | Record<string, ColumnMatch>[] | undefined
 >
 
-// Internal column-level predicate built during DNF construction.
-type ColumnPredicate = { kind: 'all' } | { kind: 'values'; values: Primitive[] }
+// Internal column-level predicate built during DNF construction. `fields`
+// values are always 'all' or 'values' — deeper-than-1 JSON paths collapse
+// to 'all' at construction time, so we never build nested 'fields'.
+type ColumnPredicate =
+  | { kind: 'all' }
+  | { kind: 'values'; values: Primitive[] }
+  | { kind: 'fields'; fields: Map<string, ColumnPredicate> }
 
 // Internal representation of a WHERE conjunct (a single AND-chain after DNF).
 type Conjunct =
@@ -95,9 +123,51 @@ function extractTableFromNode(
   }
 }
 
-function predicateToValueMatch(p: ColumnPredicate): ValueMatch {
+function predicateToColumnMatch(p: ColumnPredicate): ColumnMatch {
   if (p.kind === 'all') return MATCH_ALL
-  return { $in: p.values }
+  if (p.kind === 'values') return { $in: p.values }
+  const out: Record<string, ScalarMatch> = {}
+  for (const [k, v] of p.fields) {
+    if (v.kind === 'all') {
+      out[k] = MATCH_ALL
+    } else if (v.kind === 'values') {
+      out[k] = { $in: v.values }
+    } else {
+      out[k] = MATCH_ALL
+    }
+  }
+  return out
+}
+
+function parseJsonRef(node: JSONReferenceNode): {
+  reference: ReferenceNode
+  firstKey: string | undefined
+  keyDepth: number
+} {
+  const traversal = node.traversal
+  if (traversal.kind === 'JSONOperatorChainNode') {
+    const chain = traversal as JSONOperatorChainNode
+    const first = chain.values[0]?.value
+    return {
+      reference: node.reference,
+      firstKey: typeof first === 'string' ? first : undefined,
+      keyDepth: chain.values.length,
+    }
+  }
+  if (traversal.kind === 'JSONPathNode') {
+    const path = traversal as JSONPathNode
+    const first = path.pathLegs[0]
+    const firstKey =
+      first && first.type === 'Member' && typeof first.value === 'string'
+        ? first.value
+        : undefined
+    return {
+      reference: node.reference,
+      firstKey,
+      keyDepth: path.pathLegs.length,
+    }
+  }
+  return { reference: node.reference, firstKey: undefined, keyDepth: 0 }
 }
 
 class SelectChangeSubscriptionBuilder<DB> {
@@ -158,7 +228,7 @@ class SelectChangeSubscriptionBuilder<DB> {
     this.sub = matchAllTable(this.sub, tableName as any)
   }
 
-  private addTableFilter(tableName: string, filter: Record<string, ValueMatch>): void {
+  private addTableFilter(tableName: string, filter: Record<string, ColumnMatch>): void {
     // Skip the push entirely when a narrower write would be subsumed by a
     // global/table MATCH_ALL that's already been set.
     if (this.sub.filter === MATCH_ALL) return
@@ -322,6 +392,28 @@ class SelectChangeSubscriptionBuilder<DB> {
         this.processSelection((node as AliasNode).node)
         break
       }
+      case 'JSONReferenceNode': {
+        const parsed = parseJsonRef(node as JSONReferenceNode)
+        const ref = parsed.reference
+        if (ref.table) {
+          const name = getTableName(ref.table as TableNode)
+          if (this.subqueryAliases.has(name)) break
+        }
+        const resolved = this.resolveColumnRef(ref)
+        if (!resolved) {
+          this.widenAllSelection()
+          return
+        }
+        if (parsed.firstKey === undefined) {
+          this.addSelectedColumn(resolved.tableName, resolved.columnName)
+          break
+        }
+        this.selectedTables.add(resolved.tableName)
+        this.sub = selectTable(this.sub, resolved.tableName as any, {
+          [resolved.columnName]: { [parsed.firstKey]: true },
+        } as any)
+        break
+      }
       default:
         this.widenAllSelection()
         break
@@ -411,18 +503,23 @@ class SelectChangeSubscriptionBuilder<DB> {
       return
     }
     for (const t of affected) {
-      const columns: Record<string, ValueMatch> = {}
+      const columns: Record<string, ColumnMatch> = {}
       const tableCols = c.perTable.get(t)
       if (tableCols) {
-        for (const [col, v] of tableCols) columns[col] = predicateToValueMatch(v)
+        for (const [col, v] of tableCols) columns[col] = predicateToColumnMatch(v)
       }
       for (const [col, v] of c.unqualified) {
         const existing = columns[col]
         columns[col] = existing
-          ? predicateToValueMatch(this.andMergeColumn(valueMatchToPredicate(existing), v))
-          : predicateToValueMatch(v)
+          ? predicateToColumnMatch(this.andMergeColumn(columnMatchToPredicate(existing), v))
+          : predicateToColumnMatch(v)
       }
       this.addTableFilter(t, columns)
+    }
+    // Mandatory-joined tables not constrained by this conjunct still matter:
+    // any row change in them can add/remove outer result rows through the join.
+    for (const t of this.mandatoryJoined) {
+      if (!affected.has(t)) this.markTableFilterAll(t)
     }
   }
 
@@ -517,6 +614,15 @@ class SelectChangeSubscriptionBuilder<DB> {
   private andMergeColumn(a: ColumnPredicate, b: ColumnPredicate): ColumnPredicate {
     if (a.kind === 'all') return b
     if (b.kind === 'all') return a
+    if (a.kind === 'fields' && b.kind === 'fields') {
+      const merged = new Map(a.fields)
+      for (const [k, v] of b.fields) {
+        const prev = merged.get(k)
+        merged.set(k, prev ? this.andMergeColumn(prev, v) : v)
+      }
+      return { kind: 'fields', fields: merged }
+    }
+    if (a.kind === 'fields' || b.kind === 'fields') return { kind: 'all' }
     return { kind: 'values', values: [...a.values, ...b.values] }
   }
 
@@ -528,25 +634,43 @@ class SelectChangeSubscriptionBuilder<DB> {
       this.collectSubqueryMatchers(node.rightOperand as SelectQueryNode)
     }
 
-    if (node.leftOperand.kind !== 'ReferenceNode') {
+    let ref: ReferenceNode
+    let firstKey: string | undefined
+    let keyDepth = 0
+    if (node.leftOperand.kind === 'ReferenceNode') {
+      ref = node.leftOperand as ReferenceNode
+    } else if (node.leftOperand.kind === 'JSONReferenceNode') {
+      const parsed = parseJsonRef(node.leftOperand as JSONReferenceNode)
+      ref = parsed.reference
+      firstKey = parsed.firstKey
+      keyDepth = parsed.keyDepth
+    } else {
       return { kind: 'tables-all', tables: [...this.queriedTables] }
     }
-    const ref = node.leftOperand as ReferenceNode
 
     if (node.operator.kind !== 'OperatorNode') {
       return { kind: 'tables-all', tables: [...this.queriedTables] }
     }
     const operator = (node.operator as OperatorNode).operator
 
-    let column: ColumnPredicate
+    let scalar: ColumnPredicate
     if (operator === '=') {
       const v = this.extractSingleValue(node.rightOperand)
-      column = v !== undefined ? { kind: 'values', values: [v as Primitive] } : { kind: 'all' }
+      scalar = v !== undefined ? { kind: 'values', values: [v as Primitive] } : { kind: 'all' }
     } else if (operator === 'in') {
       const vs = this.extractListValues(node.rightOperand)
-      column = vs !== undefined ? { kind: 'values', values: vs as Primitive[] } : { kind: 'all' }
+      scalar = vs !== undefined ? { kind: 'values', values: vs as Primitive[] } : { kind: 'all' }
     } else {
-      column = { kind: 'all' }
+      scalar = { kind: 'all' }
+    }
+
+    let column: ColumnPredicate
+    if (firstKey === undefined) {
+      column = scalar
+    } else if (keyDepth >= 2) {
+      column = { kind: 'fields', fields: new Map([[firstKey, { kind: 'all' }]]) }
+    } else {
+      column = { kind: 'fields', fields: new Map([[firstKey, scalar]]) }
     }
 
     if (ref.column.kind === 'SelectAllNode') {
@@ -594,7 +718,7 @@ class SelectChangeSubscriptionBuilder<DB> {
           this.markTableFilterAll(tName)
           continue
         }
-        const columns: Record<string, ValueMatch> = {}
+        const columns: Record<string, ColumnMatch> = {}
         for (const col of Object.keys(tSel)) columns[col] = MATCH_ALL
         this.addTableFilter(tName, columns)
       }
@@ -645,17 +769,37 @@ class SelectChangeSubscriptionBuilder<DB> {
   }
 }
 
-function valueMatchToPredicate(v: ValueMatch): ColumnPredicate {
+function columnMatchToPredicate(v: ColumnMatch): ColumnPredicate {
   if (v === MATCH_ALL) return { kind: 'all' }
-  return { kind: 'values', values: v.$in }
+  if ('$in' in v) return { kind: 'values', values: (v as { $in: Primitive[] }).$in }
+  const fields = new Map<string, ColumnPredicate>()
+  for (const [k, fv] of Object.entries(v)) {
+    if (fv === MATCH_ALL) {
+      fields.set(k, { kind: 'all' })
+    } else {
+      fields.set(k, { kind: 'values', values: fv.$in })
+    }
+  }
+  return { kind: 'fields', fields }
 }
 
 // MATCH_ALL is a symbol, which stableStringify can't serialize. Swap it for a
-// sentinel string purely for dedupe-key purposes.
-function filterDedupeKey(filter: Record<string, ValueMatch>): Record<string, unknown> {
+// sentinel string purely for dedupe-key purposes. Recurses into nested field
+// objects so JSON-field filters dedupe correctly.
+function filterDedupeKey(filter: Record<string, ColumnMatch>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(filter)) {
-    out[k] = v === MATCH_ALL ? '__MATCH_ALL__' : v
+    out[k] = columnMatchDedupe(v)
+  }
+  return out
+}
+
+function columnMatchDedupe(v: ColumnMatch): unknown {
+  if (v === MATCH_ALL) return '__MATCH_ALL__'
+  if ('$in' in v) return v
+  const out: Record<string, unknown> = {}
+  for (const [k, fv] of Object.entries(v)) {
+    out[k] = fv === MATCH_ALL ? '__MATCH_ALL__' : fv
   }
   return out
 }
