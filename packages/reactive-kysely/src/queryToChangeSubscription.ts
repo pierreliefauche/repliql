@@ -72,10 +72,7 @@ type ColumnMatch = ScalarMatch | { [field: string]: ScalarMatch }
 // Loose views of ChangeSubscription.{selection,filter} that we can iterate
 // generically regardless of the DB type parameter.
 type LooseSelection = Record<string, true | Record<string, true | Record<string, true>> | undefined>
-type LooseFilter = Record<
-  string,
-  typeof MATCH_ALL | Record<string, ColumnMatch>[] | undefined
->
+type LooseFilter = Record<string, typeof MATCH_ALL | Record<string, ColumnMatch>[] | undefined>
 
 // Internal column-level predicate built during DNF construction. `fields`
 // values are always 'all' or 'values' — deeper-than-1 JSON paths collapse
@@ -102,9 +99,7 @@ function getTableName(node: TableNode): string {
   return node.table.identifier.name
 }
 
-function extractTableFromNode(
-  node: OperationNode,
-): { name: string; alias?: string } | undefined {
+function extractTableFromNode(node: OperationNode): { name: string; alias?: string } | undefined {
   switch (node.kind) {
     case 'TableNode':
       return { name: getTableName(node as TableNode) }
@@ -160,9 +155,7 @@ function parseJsonRef(node: JSONReferenceNode): {
     const path = traversal as JSONPathNode
     const first = path.pathLegs[0]
     const firstKey =
-      first && first.type === 'Member' && typeof first.value === 'string'
-        ? first.value
-        : undefined
+      first && first.type === 'Member' && typeof first.value === 'string' ? first.value : undefined
     return {
       reference: node.reference,
       firstKey,
@@ -410,9 +403,13 @@ class SelectChangeSubscriptionBuilder<DB> {
           break
         }
         this.selectedTables.add(resolved.tableName)
-        this.sub = selectTable(this.sub, resolved.tableName as any, {
-          [resolved.columnName]: { [parsed.firstKey]: true },
-        } as any)
+        this.sub = selectTable(
+          this.sub,
+          resolved.tableName as any,
+          {
+            [resolved.columnName]: { [parsed.firstKey]: true },
+          } as any,
+        )
         break
       }
       default:
@@ -475,9 +472,13 @@ class SelectChangeSubscriptionBuilder<DB> {
           break
         }
         this.selectedTables.add(resolved.tableName)
-        this.sub = selectTable(this.sub, resolved.tableName as any, {
-          [resolved.columnName]: { [parsed.firstKey]: true },
-        } as any)
+        this.sub = selectTable(
+          this.sub,
+          resolved.tableName as any,
+          {
+            [resolved.columnName]: { [parsed.firstKey]: true },
+          } as any,
+        )
         break
       }
       default:
@@ -870,10 +871,9 @@ function columnMatchDedupe(v: ColumnMatch): unknown {
   return out
 }
 
-export function queryToChangeSubscription<
-  DB,
-  Q extends OperationNodeSource = OperationNodeSource,
->(query: Q): ChangeSubscription<DB> | undefined {
+export function queryToChangeSubscription<DB, Q extends OperationNodeSource = OperationNodeSource>(
+  query: Q,
+): ChangeSubscription<DB> | undefined {
   const node = query.toOperationNode()
 
   switch (node.kind) {
