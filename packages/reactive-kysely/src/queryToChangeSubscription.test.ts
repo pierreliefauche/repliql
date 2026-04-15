@@ -793,6 +793,63 @@ const tests: TestCase[] = [
       filter: { users: [{ metadata: { referral: { $in: ['alice'] } } }] },
     },
   },
+  // ---- orderBy ----
+  {
+    it: 'orderBy column not in SELECT is added to selection',
+    query: db.selectFrom('users').select(['id', 'name']).orderBy('age', 'desc'),
+    result: {
+      selection: { users: { id: true, name: true, age: true } },
+      filter: { users: MATCH_ALL },
+    },
+  },
+  {
+    it: 'orderBy column already in SELECT does not duplicate',
+    query: db.selectFrom('users').select(['id', 'name', 'age']).orderBy('age', 'desc'),
+    result: {
+      selection: { users: { id: true, name: true, age: true } },
+      filter: { users: MATCH_ALL },
+    },
+  },
+  {
+    it: 'orderBy with qualified column on joined tables',
+    query: db
+      .selectFrom('users')
+      .innerJoin('posts', 'posts.user_id', 'users.id')
+      .select(['users.id', 'posts.title'])
+      .orderBy('users.age', 'desc'),
+    result: {
+      selection: { users: { id: true, age: true }, posts: { title: true } },
+      filter: { users: MATCH_ALL, posts: MATCH_ALL },
+    },
+  },
+  {
+    it: 'orderBy multiple columns',
+    query: db.selectFrom('users').select(['id']).orderBy('name', 'asc').orderBy('age', 'desc'),
+    result: {
+      selection: { users: { id: true, name: true, age: true } },
+      filter: { users: MATCH_ALL },
+    },
+  },
+  {
+    it: 'orderBy with LIMIT ensures sort column is selected',
+    query: db.selectFrom('users').select(['id', 'name']).orderBy('age', 'desc').limit(2),
+    result: {
+      selection: { users: { id: true, name: true, age: true } },
+      filter: { users: MATCH_ALL },
+    },
+  },
+  {
+    it: 'orderBy with WHERE filter',
+    query: db
+      .selectFrom('users')
+      .select(['id'])
+      .where('deleted', '=', false)
+      .orderBy('age', 'desc'),
+    result: {
+      selection: { users: { id: true, age: true } },
+      filter: { users: [{ deleted: { $in: [false] } }] },
+    },
+  },
 ]
 
 describe('queryToChangeSubscription', () => {

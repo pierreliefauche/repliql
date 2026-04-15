@@ -4,9 +4,11 @@ import {
   concat,
   filter,
   fromPromise,
+  lazy,
   makeSubject,
   merge,
   mergeMap,
+  onEnd,
   onStart,
   pipe,
   share,
@@ -217,6 +219,12 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
           lastSeenDataHash = phash(stableStringify(data))
           return previousDataHash !== lastSeenDataHash
         }),
+        onStart(() => {
+          lastSeenDataHash = undefined
+        }),
+        onEnd(() => {
+          lastSeenDataHash = undefined
+        }),
         share,
       )
     }) as Source<Result[]>
@@ -235,6 +243,10 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
 
     const queryUpdateSource = this.getQueryUpdateSource<Result>(selectQuery.compile(), changeSub)
 
-    return concat([fromPromise(selectQuery.execute() as Promise<Result[]>), queryUpdateSource])
+    // Use lazy() so the initial query executes fresh each time a subscriber
+    // subscribes, instead of being cached from the first liveQuery() call
+    return lazy(() =>
+      concat([fromPromise(selectQuery.execute() as Promise<Result[]>), queryUpdateSource]),
+    )
   }
 }

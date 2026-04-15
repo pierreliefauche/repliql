@@ -11,6 +11,8 @@ import type {
   OperationNodeKind,
   OperationNodeSource,
   OperatorNode,
+  OrderByItemNode,
+  OrderByNode,
   OrNode,
   ParensNode,
   PrimitiveValueListNode,
@@ -198,6 +200,7 @@ class SelectChangeSubscriptionBuilder<DB> {
   build(node: SelectQueryNode): ChangeSubscription<DB> {
     this.collectTables(node)
     this.buildSelection(node)
+    this.buildOrderBySelection(node)
     this.buildMatchers(node)
     return this.sub
   }
@@ -353,6 +356,69 @@ class SelectChangeSubscriptionBuilder<DB> {
     for (const sel of node.selections) {
       if (this.sub.selection === true) break
       this.processSelection(sel.selection)
+    }
+  }
+
+  private buildOrderBySelection(node: SelectQueryNode): void {
+    if (!node.orderBy) return
+    const orderByNode = node.orderBy as OrderByNode
+    if (!orderByNode.items) return
+    for (const item of orderByNode.items) {
+      if (this.sub.selection === true) break
+      this.processOrderByItem(item as OrderByItemNode)
+    }
+  }
+
+  private processOrderByItem(item: OrderByItemNode): void {
+    const node = item.orderBy
+    if (!node) return
+
+    switch (node.kind) {
+      case 'ReferenceNode': {
+        const ref = node as ReferenceNode
+        if (ref.column.kind === 'SelectAllNode') {
+          // orderBy on '*' is unusual but handle it
+          this.widenAllQueriedSelection()
+          return
+        }
+        if (ref.table) {
+          const name = getTableName(ref.table as TableNode)
+          if (this.subqueryAliases.has(name)) return
+        }
+        const resolved = this.resolveColumnRef(ref)
+        if (!resolved) {
+          this.widenAllSelection()
+          return
+        }
+        this.addSelectedColumn(resolved.tableName, resolved.columnName)
+        break
+      }
+      case 'JSONReferenceNode': {
+        const parsed = parseJsonRef(node as JSONReferenceNode)
+        const ref = parsed.reference
+        if (ref.table) {
+          const name = getTableName(ref.table as TableNode)
+          if (this.subqueryAliases.has(name)) return
+        }
+        const resolved = this.resolveColumnRef(ref)
+        if (!resolved) {
+          this.widenAllSelection()
+          return
+        }
+        if (parsed.firstKey === undefined) {
+          this.addSelectedColumn(resolved.tableName, resolved.columnName)
+          break
+        }
+        this.selectedTables.add(resolved.tableName)
+        this.sub = selectTable(this.sub, resolved.tableName as any, {
+          [resolved.columnName]: { [parsed.firstKey]: true },
+        } as any)
+        break
+      }
+      default:
+        // Raw SQL or complex expression — widen selection
+        this.widenAllSelection()
+        break
     }
   }
 
