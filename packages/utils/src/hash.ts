@@ -32,7 +32,7 @@ export type HashValue = number & {
  * @see {@link http://www.cse.yorku.ca/~oz/hash.html#djb2} for a further description of djb2.
  */
 export const phash = (x: string, seed?: HashValue): HashValue => {
-  let h = (seed || 5381) | 0
+  let h = (seed ?? 5381) | 0
   for (let i = 0, l = x.length | 0; i < l; i++) h = (h << 5) + h + x.charCodeAt(i)
   return h as HashValue
 }

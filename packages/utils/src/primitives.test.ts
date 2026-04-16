@@ -22,6 +22,7 @@ describe('isPrimitive', () => {
     ['function', () => {}],
     ['NaN', Number.NaN],
     ['Infinity', Infinity],
+    ['-Infinity', -Infinity],
     ['Date', new Date()],
     ['Map', new Map()],
     ['Set', new Set()],

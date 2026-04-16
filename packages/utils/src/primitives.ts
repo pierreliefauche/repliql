@@ -13,11 +13,7 @@ export function isPrimitive(v: unknown): v is Primitive {
     return false
   }
 
-  if (type === 'number' && isNaN(v as number)) {
-    return false
-  }
-
-  if (v === Infinity) {
+  if (type === 'number' && !Number.isFinite(v as number)) {
     return false
   }
 
