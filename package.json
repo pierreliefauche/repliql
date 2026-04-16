@@ -10,7 +10,7 @@
   },
   "type": "module",
   "scripts": {
-    "build": "bun run build:packages",
+    "build": "bun ./scripts/build.ts",
     "build:packages": "bun run --filter='./packages/*' build",
     "dev": "NODE_ENV=development bun run --filter @repliql/playground-linear dev",
     "fmt": "oxfmt --write .",

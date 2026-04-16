@@ -21,10 +21,11 @@
     }
   },
   "scripts": {
-    "build": "bun run build:esm && bun run build:cjs && bun run build:types",
+    "build": "bun run build:ts && bun run build:esm && bun run build:cjs && bun run build:types",
     "build:cjs": "bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify",
     "build:esm": "bun build ./src/index.ts --outfile ./dist/index.mjs --format esm --minify",
-    "build:types": "tsc -p tsconfig.build.json",
+    "build:ts": "bun build ./src/index.ts --outdir ./dist --format esm --minify",
+    "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap",
     "dev": "bun build ./src/index.ts --watch --outdir ./dist --format esm",
     "fmt": "oxfmt --write src",
     "lint": "oxlint src",

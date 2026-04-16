@@ -2,6 +2,7 @@
 /**
  * Build Script for RepliQL Monorepo
  * Orchestrates building all library packages and the playground
+ * Builds packages in dependency order to ensure declaration files are available
  */
 
 import fs from 'fs'
@@ -11,7 +12,7 @@ import { $ } from 'bun'
 
 const ROOT = import.meta.dir.replace('/scripts', '')
 const PACKAGES_DIR = path.join(ROOT, 'packages')
-const PLAYGROUND_DIR = path.join(ROOT, 'playground')
+const PLAYGROUNDS_DIR = path.join(ROOT, 'playgrounds')
 
 interface BuildResult {
   name: string
@@ -33,6 +34,86 @@ function log(message: string, type: 'info' | 'success' | 'error' | 'warn' = 'inf
     warn: '⚠️',
   }
   console.log(`${icons[type]} ${message}`)
+}
+
+/**
+ * Get internal dependencies for a package (dependencies starting with @repliql/)
+ */
+function getInternalDependencies(packageName: string): string[] {
+  const pkgPath = path.join(PACKAGES_DIR, packageName)
+  const packageJsonPath = path.join(pkgPath, 'package.json')
+
+  if (!fs.existsSync(packageJsonPath)) {
+    return []
+  }
+
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
+  const allDeps = {
+    ...packageJson.dependencies,
+    ...packageJson.devDependencies,
+    ...packageJson.peerDependencies,
+  }
+
+  return Object.keys(allDeps)
+    .filter(dep => dep.startsWith('@repliql/'))
+    .map(dep => dep.replace('@repliql/', ''))
+}
+
+/**
+ * Topologically sort packages based on their dependencies
+ * Returns packages in build order (dependencies first)
+ */
+function sortPackagesByDependencies(packages: string[]): string[] {
+  const graph = new Map<string, string[]>()
+  const inDegree = new Map<string, number>()
+
+  // Initialize
+  for (const pkg of packages) {
+    graph.set(pkg, [])
+    inDegree.set(pkg, 0)
+  }
+
+  // Build dependency graph
+  for (const pkg of packages) {
+    const deps = getInternalDependencies(pkg)
+    for (const dep of deps) {
+      if (packages.includes(dep)) {
+        graph.get(dep)!.push(pkg)
+        inDegree.set(pkg, (inDegree.get(pkg) || 0) + 1)
+      }
+    }
+  }
+
+  // Kahn's algorithm for topological sort
+  const queue: string[] = []
+  const result: string[] = []
+
+  // Start with packages that have no dependencies
+  for (const pkg of packages) {
+    if (inDegree.get(pkg) === 0) {
+      queue.push(pkg)
+    }
+  }
+
+  while (queue.length > 0) {
+    const pkg = queue.shift()!
+    result.push(pkg)
+
+    for (const dependent of graph.get(pkg) || []) {
+      inDegree.set(dependent, inDegree.get(dependent)! - 1)
+      if (inDegree.get(dependent) === 0) {
+        queue.push(dependent)
+      }
+    }
+  }
+
+  // Check for circular dependencies
+  if (result.length !== packages.length) {
+    log('Warning: Circular dependencies detected, falling back to original order', 'warn')
+    return packages
+  }
+
+  return result
 }
 
 /**
@@ -79,27 +160,37 @@ async function buildPackage(packageName: string): Promise<BuildResult> {
 /**
  * Build playground web app
  */
-async function buildPlayground(): Promise<BuildResult> {
+async function buildPlayground(name: string): Promise<BuildResult> {
+  const playgroundPath = path.join(PLAYGROUNDS_DIR, name)
+
+  if (!fs.existsSync(playgroundPath)) {
+    return {
+      name: `playground/${name}`,
+      success: false,
+      error: 'Playground not found',
+    }
+  }
+
   try {
     const startTime = Date.now()
-    log('Building playground...')
+    log(`Building playground/${name}...`)
 
-    await $`cd ${PLAYGROUND_DIR} && bun run build`
+    await $`cd ${playgroundPath} && bun run build`
 
     const duration = Date.now() - startTime
-    log(`Built playground in ${duration}ms`, 'success')
+    log(`Built playground/${name} in ${duration}ms`, 'success')
 
     return {
-      name: 'playground',
+      name: `playground/${name}`,
       success: true,
       duration,
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
-    log(`Failed to build playground: ${errorMsg}`, 'error')
+    log(`Failed to build playground/${name}: ${errorMsg}`, 'error')
 
     return {
-      name: 'playground',
+      name: `playground/${name}`,
       success: false,
       error: errorMsg,
     }
@@ -113,19 +204,41 @@ async function main() {
   log('🚀 Starting monorepo build...')
   console.log()
 
-  // Get list of packages
+  // Get list of packages and sort by dependencies
   const packages = fs
     .readdirSync(PACKAGES_DIR)
     .filter(name => fs.statSync(path.join(PACKAGES_DIR, name)).isDirectory())
 
-  // Build all packages in parallel
-  log(`Building ${packages.length} package(s)...`)
-  const packageResults = await Promise.all(packages.map(buildPackage))
-  results.push(...packageResults)
+  const sortedPackages = sortPackagesByDependencies(packages)
 
-  // Build playground
-  const playgroundResult = await buildPlayground()
-  results.push(playgroundResult)
+  // Build packages in dependency order (sequentially to ensure types are available)
+  log(`Building ${sortedPackages.length} package(s) in dependency order...`)
+  log(`Build order: ${sortedPackages.join(' → ')}`)
+  console.log()
+
+  for (const pkg of sortedPackages) {
+    const result = await buildPackage(pkg)
+    results.push(result)
+
+    // Stop on failure since dependent packages won't build without types
+    if (!result.success) {
+      log(`Stopping build due to failure in ${pkg}`, 'error')
+      break
+    }
+  }
+
+  // Build playgrounds (only if all packages succeeded)
+  const allPackagesSucceeded = results.every(r => r.success)
+  if (allPackagesSucceeded && fs.existsSync(PLAYGROUNDS_DIR)) {
+    const playgrounds = fs
+      .readdirSync(PLAYGROUNDS_DIR)
+      .filter(name => fs.statSync(path.join(PLAYGROUNDS_DIR, name)).isDirectory())
+
+    for (const playground of playgrounds) {
+      const result = await buildPlayground(playground)
+      results.push(result)
+    }
+  }
 
   // Summary
   console.log('\n📊 Build Summary:')
