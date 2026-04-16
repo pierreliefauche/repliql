@@ -1,11 +1,16 @@
 {
-  "name": "@repliql/utils",
+  "name": "@repliql/reactive-kysely",
   "version": "0.0.1",
+  "description": "",
+  "keywords": [
+    "kysely"
+  ],
+  "license": "MIT",
+  "author": "RepliQL Contributors",
   "files": [
     "dist"
   ],
   "type": "module",
-  "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "exports": {
@@ -20,14 +25,20 @@
     "build:cjs": "bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify",
     "build:esm": "bun build ./src/index.ts --outfile ./dist/index.mjs --format esm --minify",
     "build:types": "tsc -p tsconfig.build.json",
+    "dev": "bun build ./src/index.ts --watch --outdir ./dist --format esm",
     "fmt": "oxfmt --write src",
     "lint": "oxlint src",
-    "test": "bun test ./src/**/*.test.ts ./src/*.test.ts"
+    "test": "bun test ./src/**/*.test.ts ./src/*.test.ts",
+    "test:watch": "bun test ./src/**/*.test.ts ./src/*.test.ts --watch"
   },
   "dependencies": {
-    "@solana/fast-stable-stringify": "^6.8.0"
+    "@repliql/utils": "workspace:*",
+    "wonka": "catalog:"
   },
   "devDependencies": {
-    "wonka": "catalog:"
+    "node-sqlite3-wasm": "^0.8.56"
+  },
+  "peerDependencies": {
+    "kysely": "catalog:"
   }
 }

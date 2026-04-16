@@ -1,0 +1,1 @@
+export const DEFAULT_QUERY_UPDATE_DEBOUNCE_MS = 10
