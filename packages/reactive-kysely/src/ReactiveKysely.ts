@@ -36,7 +36,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
   protected createCallbackFunction: CreateCallbackFunction
 
   private defaultQueryUpdateDebounceMs: number
-  private queryUpdateDebounceMs = new Map<string, number>()
+  private queryUpdateDebounceMs = new Map<HashValue, number>()
 
   private rowUpdatesSubject = makeSubject<RowUpdate<DB>>()
   private tableRowUpdatesSources = new SourceMap<RowUpdate<DB>, string>()
@@ -228,14 +228,16 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
       this.queryUpdateDebounceMs.set(sourceKey, debounceMs)
     }
 
-    return this.queryUpdateSources.getOrCreate(sourceKey, () => {
+    const makeQueryUpdateSource = () => {
       let lastSeenDataHash: undefined | HashValue
 
       const changeSource = this.getChangeSubscriptionSource(changeSub)
 
       return pipe(
         changeSource,
-        debounce(() => this.queryUpdateDebounceMs.get(sourceKey)),
+        debounce(
+          () => this.queryUpdateDebounceMs.get(sourceKey) ?? this.defaultQueryUpdateDebounceMs,
+        ),
         mergeMap(() => fromPromise(this.executeQuery(compiledQuery).then(({ rows }) => rows))),
         filter(data => {
           const previousDataHash = lastSeenDataHash
@@ -249,8 +251,12 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
           lastSeenDataHash = undefined
         }),
         share,
-      ) as Source<Result[]>
-    })
+      )
+    }
+
+    return this.queryUpdateSources.getOrCreate(sourceKey, makeQueryUpdateSource) as ReturnType<
+      typeof makeQueryUpdateSource
+    >
   }
 
   public liveQuery<
