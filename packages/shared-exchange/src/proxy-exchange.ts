@@ -70,53 +70,55 @@ export function proxySharedExchange({
 
     const ensureConnected = async () => {
       if (!connectionPromise) {
-        connectionPromise = Promise.resolve().then(async () => {
-        // Set up the forward pipeline BEFORE connecting to the hub.
-        // This ensures we're ready to receive forwarded operations as soon as onForward is called.
-        // Results from forwarded ops are sent back to the hub.
-        pipe(
-          forwardedOps.source,
-          forward,
-          subscribe((result: OperationResult) => {
-            void hub.resolveForwarded(spokeId, result.operation.key, serializeResult(result))
-          }),
-        )
+        connectionPromise = Promise.resolve()
+          .then(async () => {
+            // Set up the forward pipeline BEFORE connecting to the hub.
+            // This ensures we're ready to receive forwarded operations as soon as onForward is called.
+            // Results from forwarded ops are sent back to the hub.
+            pipe(
+              forwardedOps.source,
+              forward,
+              subscribe((result: OperationResult) => {
+                void hub.resolveForwarded(spokeId, result.operation.key, serializeResult(result))
+              }),
+            )
 
-        await heartbeat.start(spokeId)
+            await heartbeat.start(spokeId)
 
-        await hub.connect(
-          spokeId,
-          proxy({
-            onResult(result: SerializedResult): void {
-              const op = pendingOps.get(result.key)
-              if (!op) return
-              resultSubjects.get(result.key)?.next(deserializeResult(result, op))
-            },
+            await hub.connect(
+              spokeId,
+              proxy({
+                onResult(result: SerializedResult): void {
+                  const op = pendingOps.get(result.key)
+                  if (!op) return
+                  resultSubjects.get(result.key)?.next(deserializeResult(result, op))
+                },
 
-            onForward(serialized: SerializedOperation): void {
-              // Re-hydrate with non-serializable context from the original operation.
-              // This preserves functions like fetch, fetchOptions while respecting any
-              // modifications the hub made to serializable fields.
-              const originalOp = pendingOps.get(serialized.key)
-              const op = deserializeOp(serialized, originalOp)
+                onForward(serialized: SerializedOperation): void {
+                  // Re-hydrate with non-serializable context from the original operation.
+                  // This preserves functions like fetch, fetchOptions while respecting any
+                  // modifications the hub made to serializable fields.
+                  const originalOp = pendingOps.get(serialized.key)
+                  const op = deserializeOp(serialized, originalOp)
 
-              // Push the operation (including teardowns) through the single forward stream.
-              // This complies with URQL's requirement that forward() is called only once.
-              forwardedOps.next(op)
-            },
+                  // Push the operation (including teardowns) through the single forward stream.
+                  // This complies with URQL's requirement that forward() is called only once.
+                  forwardedOps.next(op)
+                },
 
-            onReexecute(serialized: SerializedOperation): void {
-              // Re-hydrate with non-serializable context from the original operation.
-              const originalOp = pendingOps.get(serialized.key)
-              const op = deserializeOp(serialized, originalOp)
-              client.reexecuteOperation(op)
-            },
-          }),
-        )
-        }).catch((error) => {
-          connectionPromise = null
-          throw error
-        })
+                onReexecute(serialized: SerializedOperation): void {
+                  // Re-hydrate with non-serializable context from the original operation.
+                  const originalOp = pendingOps.get(serialized.key)
+                  const op = deserializeOp(serialized, originalOp)
+                  client.reexecuteOperation(op)
+                },
+              }),
+            )
+          })
+          .catch(error => {
+            connectionPromise = null
+            throw error
+          })
       }
       return connectionPromise
     }

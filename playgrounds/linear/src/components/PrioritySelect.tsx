@@ -1,5 +1,10 @@
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { PriorityBadge, priorities } from '@/components/PriorityBadge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface PrioritySelectProps {
   priority: number
@@ -13,7 +18,7 @@ export function PrioritySelect({ priority, onChange }: PrioritySelectProps) {
         <PriorityBadge priority={priority} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        {priorities.map((p) => (
+        {priorities.map(p => (
           <DropdownMenuItem key={p.value} onSelect={() => onChange(p.value)}>
             <PriorityBadge priority={p.value} />
           </DropdownMenuItem>
