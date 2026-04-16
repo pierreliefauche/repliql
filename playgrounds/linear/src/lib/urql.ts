@@ -1,4 +1,4 @@
-import { proxySharedExchange } from '@repliql/shared-exchange'
+import { proxySharedExchange, proxySharedService } from '@repliql/shared-exchange'
 import { createClient, fetchExchange } from 'urql'
 
 const LINEAR_API_URL = 'https://api.linear.app/graphql'
@@ -7,7 +7,8 @@ const worker = new SharedWorker(new URL('../worker.ts', import.meta.url), {
   type: 'module',
   name: 'shared-service',
 })
-const sharedExchange = proxySharedExchange({ endpoint: worker.port })
+const sharedService = proxySharedService({ endpoint: worker.port })
+const sharedExchange = proxySharedExchange({ sharedService })
 
 export function getApiToken(): string | null {
   return localStorage.getItem('linear-api-token')
