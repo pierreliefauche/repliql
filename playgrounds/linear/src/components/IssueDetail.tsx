@@ -2,11 +2,15 @@ import { ArrowSquareOutIcon, X } from '@phosphor-icons/react'
 import { DateTime } from 'luxon'
 import { useQuery, useMutation } from 'urql'
 
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { ISSUE_DETAIL_QUERY, UPDATE_ISSUE_PRIORITY_MUTATION, UPDATE_ISSUE_STATE_MUTATION } from '@/lib/queries'
 import { PrioritySelect } from '@/components/PrioritySelect'
 import { StatusSelect } from '@/components/StatusSelect'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  ISSUE_DETAIL_QUERY,
+  UPDATE_ISSUE_PRIORITY_MUTATION,
+  UPDATE_ISSUE_STATE_MUTATION,
+} from '@/lib/queries'
 
 interface IssueDetailProps {
   issueId: string
@@ -55,7 +59,7 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
                   <StatusSelect
                     teamId={issue.team.id}
                     state={issue.state}
-                    onChange={(stateId) => updateState({ id: issue.id, stateId })}
+                    onChange={stateId => updateState({ id: issue.id, stateId })}
                   />
                 )}
               </div>
@@ -63,7 +67,7 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
                 <p className="mb-1 text-xs text-muted-foreground">Priority</p>
                 <PrioritySelect
                   priority={issue.priority}
-                  onChange={(priority) => updatePriority({ id: issue.id, priority })}
+                  onChange={priority => updatePriority({ id: issue.id, priority })}
                 />
               </div>
             </div>
