@@ -850,9 +850,9 @@ function columnMatchToPredicate(v: ColumnMatch): ColumnPredicate {
   return { kind: 'fields', fields }
 }
 
-// MATCH_ALL is a symbol, which stableStringify can't serialize. Swap it for a
-// sentinel string purely for dedupe-key purposes. Recurses into nested field
-// objects so JSON-field filters dedupe correctly.
+// Normalize MATCH_ALL to a sentinel string purely for dedupe-key purposes.
+// Recurse into nested field objects so JSON-field filters dedupe correctly
+// with stableStringify.
 function filterDedupeKey(filter: Record<string, ColumnMatch>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(filter)) {
