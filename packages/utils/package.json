@@ -7,21 +7,19 @@
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
+  "module": "./dist/index.js",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
+      "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     }
   },
   "scripts": {
-    "build": "bun run build:ts && bun run build:esm && bun run build:cjs && bun run build:types",
-    "build:cjs": "bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify",
-    "build:esm": "bun build ./src/index.ts --outfile ./dist/index.mjs --format esm --minify",
-    "build:ts": "bun build ./src/index.ts --outdir ./dist --format esm --minify",
-    "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap",
-    "dev": "bun build ./src/index.ts --watch --outdir ./dist --format esm",
+    "build": "bun run build:esm && bun run build:cjs",
+    "build:cjs": "bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify --packages=external",
+    "build:esm": "tsc",
+    "dev": "tsc --watch",
     "fmt": "oxfmt --write src",
     "lint": "oxlint src",
     "test": "bun test ./src/**/*.test.ts ./src/*.test.ts",
