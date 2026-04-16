@@ -43,7 +43,19 @@ export class SharedService {
   private readonly fakeClient: Client
 
   constructor({ exchange, heartbeat: _heartbeat }: SharedServiceConfig) {
-    this.heartbeat = _heartbeat || navigatorHeartbeat
+    if (_heartbeat) {  
+      this.heartbeat = _heartbeat  
+    } else if (  
+      typeof navigator !== 'undefined' &&  
+      typeof navigator.locks !== 'undefined'  
+    ) {  
+      this.heartbeat = navigatorHeartbeat  
+    } else {  
+      throw new Error(  
+        'SharedService requires a heartbeat in environments without navigator.locks. Pass SharedServiceConfig.heartbeat explicitly.'  
+      )  
+    }  
+    
     this.exchange = exchange
     this.spokes = new Map()
     this.operationSubscribers = new Map()

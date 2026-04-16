@@ -70,6 +70,7 @@ export function proxySharedExchange({
 
     const ensureConnected = async () => {
       if (!connectionPromise) {
+        connectionPromise = Promise.resolve().then(async () => {
         // Set up the forward pipeline BEFORE connecting to the hub.
         // This ensures we're ready to receive forwarded operations as soon as onForward is called.
         // Results from forwarded ops are sent back to the hub.
@@ -83,7 +84,7 @@ export function proxySharedExchange({
 
         await heartbeat.start(spokeId)
 
-        connectionPromise = hub.connect(
+        await hub.connect(
           spokeId,
           proxy({
             onResult(result: SerializedResult): void {
@@ -111,7 +112,11 @@ export function proxySharedExchange({
               client.reexecuteOperation(op)
             },
           }),
-        ) as Promise<void>
+        )
+        }).catch((error) => {
+          connectionPromise = null
+          throw error
+        })
       }
       return connectionPromise
     }

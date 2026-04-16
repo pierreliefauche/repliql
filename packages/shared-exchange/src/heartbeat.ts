@@ -1,4 +1,4 @@
-import { Heartbeat } from './types'
+import type { Heartbeat } from './types'
 
 export function getLockName(heartbeatId: string): string {
   return `shared-exchange-heartbeat-${heartbeatId}`
