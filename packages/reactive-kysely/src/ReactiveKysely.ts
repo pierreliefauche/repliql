@@ -12,10 +12,12 @@ import {
   onStart,
   pipe,
   share,
+  debounce,
   Source,
 } from 'wonka'
 
 import { type ChangeSubscription, changeSubscriptionTables } from './ChangeSubscription'
+import { DEFAULT_QUERY_UPDATE_DEBOUNCE_MS } from './constants'
 import { compileChangeSubscription, isChangeSubscriptionUpdate } from './isChangeSubscriptionUpdate'
 import { queryToChangeSubscription } from './queryToChangeSubscription'
 import { AnyTable, Row, RowUpdate } from './types'
@@ -27,10 +29,14 @@ type CreateCallbackFunction = (
 
 export type ReactiveKyselyConfig = (KyselyConfig | KyselyProps) & {
   createCallbackFunction: CreateCallbackFunction
+  queryUpdateDebounceMs?: number
 }
 
 export class ReactiveKysely<DB = any> extends Kysely<DB> {
   protected createCallbackFunction: CreateCallbackFunction
+
+  private defaultQueryUpdateDebounceMs: number
+  private queryUpdateDebounceMs = new Map<string, number>()
 
   private rowUpdatesSubject = makeSubject<RowUpdate<DB>>()
   private tableRowUpdatesSources = new SourceMap<RowUpdate<DB>, string>()
@@ -45,9 +51,10 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
         [Table in AnyTable<DB>]: (keyof DB[Table])[]
       }>
 
-  constructor({ createCallbackFunction, ...config }: ReactiveKyselyConfig) {
+  constructor({ createCallbackFunction, queryUpdateDebounceMs, ...config }: ReactiveKyselyConfig) {
     super(config)
     this.createCallbackFunction = createCallbackFunction
+    this.defaultQueryUpdateDebounceMs = queryUpdateDebounceMs ?? DEFAULT_QUERY_UPDATE_DEBOUNCE_MS
   }
 
   private async getDbSchema(): NonNullable<ReactiveKysely<DB>['dbSchemaPromise']> {
@@ -201,10 +208,25 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
   private getQueryUpdateSource<Result>(
     compiledQuery: CompiledQuery<Result>,
     changeSub: ChangeSubscription<DB>,
+    options?: { debounceMs?: number },
   ): Source<Result[]> {
+    const debounceMs = options?.debounceMs ?? this.defaultQueryUpdateDebounceMs
+
     const sourceKey = phash(
-      stableStringify({ sql: compiledQuery.sql, parameters: compiledQuery.parameters }),
+      stableStringify({
+        sql: compiledQuery.sql,
+        parameters: compiledQuery.parameters,
+        debounceMs,
+      }),
     )
+
+    // Update query update debounce to keep lowest debounce
+    if (
+      !this.queryUpdateDebounceMs.has(sourceKey) ||
+      this.queryUpdateDebounceMs.get(sourceKey)! > debounceMs
+    ) {
+      this.queryUpdateDebounceMs.set(sourceKey, debounceMs)
+    }
 
     return this.queryUpdateSources.getOrCreate(sourceKey, () => {
       let lastSeenDataHash: undefined | HashValue
@@ -213,6 +235,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
 
       return pipe(
         changeSource,
+        debounce(() => this.queryUpdateDebounceMs.get(sourceKey)),
         mergeMap(() => fromPromise(this.executeQuery(compiledQuery).then(({ rows }) => rows))),
         filter(data => {
           const previousDataHash = lastSeenDataHash
@@ -226,14 +249,14 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
           lastSeenDataHash = undefined
         }),
         share,
-      )
-    }) as Source<Result[]>
+      ) as Source<Result[]>
+    })
   }
 
   public liveQuery<
     Q extends ReturnType<this['selectFrom']>,
     Result = Awaited<ReturnType<Q['execute']>>[number],
-  >(query: Q | ((queryBuilder: this) => Q)): Source<Result[]> {
+  >(query: Q | ((queryBuilder: this) => Q), options?: { debounceMs?: number }): Source<Result[]> {
     const selectQuery = typeof query === 'function' ? query(this) : query
 
     const changeSub = queryToChangeSubscription(selectQuery)
@@ -241,12 +264,23 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
       throw new Error('Invalid operation')
     }
 
-    const queryUpdateSource = this.getQueryUpdateSource<Result>(selectQuery.compile(), changeSub)
+    const queryUpdateSource = this.getQueryUpdateSource<Result>(
+      selectQuery.compile(),
+      changeSub,
+      options,
+    )
 
     // Use lazy() so the initial query executes fresh each time a subscriber
     // subscribes, instead of being cached from the first liveQuery() call
+    const debounceMs = options?.debounceMs
     return lazy(() =>
-      concat([fromPromise(selectQuery.execute() as Promise<Result[]>), queryUpdateSource]),
+      // We use concat to start listening to changes AFTER the initial request completes
+      concat([
+        // This should fire as soon as the source is being listened to!
+        fromPromise(selectQuery.execute() as Promise<Result[]>),
+        // The query update source though can be debounced
+        debounceMs ? debounce<Result[]>(() => debounceMs)(queryUpdateSource) : queryUpdateSource,
+      ]),
     )
   }
 }

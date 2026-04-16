@@ -117,6 +117,7 @@ beforeEach(async () => {
         return null
       })
     },
+    queryUpdateDebounceMs: 0,
   })
   await sql`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER, metadata TEXT)`.execute(
     db,
@@ -1300,5 +1301,170 @@ describe('ReactiveKysely — IN clause', () => {
     expect(emissions.length).toBe(countBefore)
 
     unsubscribe()
+  })
+})
+
+describe('ReactiveKysely — queryUpdateDebounceMs', () => {
+  const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+  it('debounces rapid mutations with instance-level debounce config', async () => {
+    // Create a separate database for this test to avoid lifecycle issues
+    const debouncedSqlite = new Database(':memory:')
+    const debouncedAdapted = adaptDatabase(debouncedSqlite)
+    const debouncedDb = new InstrumentedReactiveKysely<DB>({
+      dialect: new SqliteDialect({ database: debouncedAdapted }),
+      createCallbackFunction: (name, cb) => {
+        debouncedAdapted.function(name, (oldJson: any, newJson: any) => {
+          cb(oldJson, newJson)
+          return null
+        })
+      },
+      queryUpdateDebounceMs: 50,
+    })
+
+    await sql`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER, metadata TEXT)`.execute(
+      debouncedDb,
+    )
+    await debouncedDb
+      .insertInto('users')
+      .values({ id: 1, name: 'alice', age: 30, metadata: null })
+      .execute()
+
+    // Create live query on separate db instance with debounce
+    const { emissions, unsubscribe } = collect(
+      debouncedDb.liveQuery(debouncedDb.selectFrom('users').selectAll()),
+    )
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    debouncedDb.executeQueryCount = 0
+
+    // Fire 3 rapid mutations - should be debounced into fewer refetches
+    await debouncedDb.updateTable('users').set({ age: 31 }).where('id', '=', 1).execute()
+    await debouncedDb.updateTable('users').set({ age: 32 }).where('id', '=', 1).execute()
+    await debouncedDb.updateTable('users').set({ age: 33 }).where('id', '=', 1).execute()
+
+    // Before debounce window, no refetch should have occurred
+    expect(debouncedDb.executeQueryCount).toBe(0)
+
+    // Wait for debounce to settle
+    await wait(100)
+    await flush()
+
+    // Should have refetched only once (debounced)
+    expect(debouncedDb.executeQueryCount).toBe(1)
+    expect((emissions.at(-1) as any)?.[0]?.age).toBe(33)
+
+    unsubscribe()
+    await debouncedDb.destroy()
+  })
+
+  it('per-query debounceMs overrides instance-level config', async () => {
+    await db.insertInto('users').values({ id: 1, name: 'alice', age: 30, metadata: null }).execute()
+
+    // Instance db has queryUpdateDebounceMs: 0, but we override per-query
+    const { emissions, unsubscribe } = collect(
+      db.liveQuery(db.selectFrom('users').selectAll(), { debounceMs: 50 }),
+    )
+    // Wait for debounce to settle for initial emission
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    db.executeQueryCount = 0
+
+    // Fire rapid mutations
+    await db.updateTable('users').set({ age: 31 }).where('id', '=', 1).execute()
+    await db.updateTable('users').set({ age: 32 }).where('id', '=', 1).execute()
+
+    // Should not have refetched yet (debounce pending)
+    expect(db.executeQueryCount).toBe(0)
+
+    // Wait for debounce
+    await wait(100)
+    await flush()
+
+    // Should have refetched once
+    expect(db.executeQueryCount).toBe(1)
+    expect(emissions.at(-1)).toEqual([{ id: 1, name: 'alice', age: 32, metadata: null }])
+
+    unsubscribe()
+  })
+
+  it('debounceMs: 0 disables debouncing (immediate refetch)', async () => {
+    await db.insertInto('users').values({ id: 1, name: 'alice', age: 30, metadata: null }).execute()
+
+    // This is the default in beforeEach, but explicitly verifying
+    const { emissions, unsubscribe } = collect(
+      db.liveQuery(db.selectFrom('users').selectAll(), { debounceMs: 0 }),
+    )
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    db.executeQueryCount = 0
+
+    await db.updateTable('users').set({ age: 31 }).where('id', '=', 1).execute()
+    await flush()
+
+    // Should have refetched immediately
+    expect(db.executeQueryCount).toBe(1)
+    expect(emissions.at(-1)).toEqual([{ id: 1, name: 'alice', age: 31, metadata: null }])
+
+    unsubscribe()
+  })
+
+  it('queries with different debounceMs have separate queryUpdateSources', async () => {
+    await db.insertInto('users').values({ id: 1, name: 'alice', age: 30, metadata: null }).execute()
+
+    // Two liveQuery calls with same SQL but different debounce settings
+    const immediate = collect(db.liveQuery(db.selectFrom('users').selectAll(), { debounceMs: 0 }))
+    const debounced = collect(db.liveQuery(db.selectFrom('users').selectAll(), { debounceMs: 50 }))
+    await flush()
+
+    expect(immediate.emissions).toHaveLength(1)
+    expect(debounced.emissions).toHaveLength(1)
+
+    db.executeQueryCount = 0
+
+    await db.updateTable('users').set({ age: 31 }).where('id', '=', 1).execute()
+    await flush()
+
+    // Immediate should have refetched
+    expect(immediate.emissions.at(-1)).toEqual([{ id: 1, name: 'alice', age: 31, metadata: null }])
+
+    // Debounced should not have refetched yet (still waiting)
+    const debouncedEmissionCount = debounced.emissions.length
+
+    // Wait for debounce to settle
+    await wait(100)
+    await flush()
+
+    // Now debounced should have caught up
+    expect(debounced.emissions.length).toBeGreaterThan(debouncedEmissionCount)
+    expect(debounced.emissions.at(-1)).toEqual([{ id: 1, name: 'alice', age: 31, metadata: null }])
+
+    immediate.unsubscribe()
+    debounced.unsubscribe()
+  })
+
+  it('same debounceMs shares queryUpdateSource', async () => {
+    await db.insertInto('users').values({ id: 1, name: 'alice', age: 30, metadata: null }).execute()
+
+    // Two liveQuery calls with same SQL and same debounce
+    const a = collect(db.liveQuery(db.selectFrom('users').selectAll(), { debounceMs: 0 }))
+    const b = collect(db.liveQuery(db.selectFrom('users').selectAll(), { debounceMs: 0 }))
+    await flush()
+
+    db.executeQueryCount = 0
+
+    await db.updateTable('users').set({ age: 31 }).where('id', '=', 1).execute()
+    await flush()
+
+    // Should share refetch (only 1 query executed)
+    expect(db.executeQueryCount).toBe(1)
+    expect(a.emissions.at(-1)).toEqual([{ id: 1, name: 'alice', age: 31, metadata: null }])
+    expect(b.emissions.at(-1)).toEqual([{ id: 1, name: 'alice', age: 31, metadata: null }])
+
+    a.unsubscribe()
+    b.unsubscribe()
   })
 })
