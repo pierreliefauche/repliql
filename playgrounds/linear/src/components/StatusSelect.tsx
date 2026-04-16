@@ -1,5 +1,11 @@
 import { useQuery } from 'urql'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { WORKFLOW_STATES_QUERY } from '@/lib/queries'
 
 interface State {
@@ -31,7 +37,7 @@ export function StatusSelect({ teamId, state, onChange }: StatusSelectProps) {
         </div>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        {states.map((s) => (
+        {states.map(s => (
           <DropdownMenuItem key={s.id} onSelect={() => onChange(s.id)}>
             <div className="flex items-center gap-2">
               <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: s.color }} />

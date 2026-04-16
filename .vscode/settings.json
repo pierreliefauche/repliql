@@ -1,0 +1,61 @@
+{
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.removeUnusedImports": "explicit"
+  },
+  // Extension: Oxfmt -- set it as default formatter for all languages.
+  // It's important here to not set wholesale "editor.defaultFormatter": "oxc.oxc-vscode" buts instead override all languages that Oxfmt supports.
+  // Otherwise, potential language settings in a user's `settings.json` apply instead.
+  "[html]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.preferences.includePackageJsonAutoImports": "off",
+  // "workbench.colorTheme": "Atom One Light",
+  "workbench.iconTheme": "material-icon-theme",
+  "claudeCode.useTerminal": false,
+  "cSpell.words": [
+    "aliasable",
+    "codegen",
+    "elysia",
+    "elysiajs",
+    "kysely",
+    "repliql",
+    "urql",
+    "oxfmt",
+    "oxlint",
+    "wouter",
+    "graphcache",
+    "teardown",
+    "comlink",
+    "wonka"
+  ],
+  "editor.tabSize": 2,
+  "oxc.fmt.configPath": ".oxfmtrc.jsonc",
+  "chat.tools.terminal.autoApprove": {
+    "bun": true
+  }
+}

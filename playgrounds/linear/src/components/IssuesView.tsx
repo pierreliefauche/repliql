@@ -7,7 +7,6 @@ import { PriorityBadge } from '@/components/PriorityBadge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ISSUES_QUERY } from '@/lib/queries'
 
-
 export function IssuesView() {
   const [, navigate] = useLocation()
   const [{ data, fetching, error }] = useQuery({
