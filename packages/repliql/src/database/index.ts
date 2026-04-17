@@ -1,5 +1,5 @@
 import type { ReactiveKysely } from '@repliql/reactive-kysely'
-import { Entity, isPrimitive, Primitive } from '@repliql/utils'
+import { Entity, EntityRef, isPrimitive, Primitive } from '@repliql/utils'
 import { type MigrationResultSet, Migrator, sql } from 'kysely'
 
 import type { DatabaseSchema } from './schema'
@@ -111,7 +111,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
     return result
   }
 
-  public async getEntitiesByRef(args: { entityRefs: readonly string[] }) {
+  public async getEntitiesByRef(args: { entityRefs: readonly EntityRef[] }) {
     const { entityRefs } = args
     if (!entityRefs.length) {
       return []

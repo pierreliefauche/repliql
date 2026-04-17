@@ -1,4 +1,8 @@
-import type { ReactiveKysely } from '@repliql/reactive-kysely'
+import {
+  queryToChangeSubscription,
+  type ChangeSubscription,
+  type ReactiveKysely,
+} from '@repliql/reactive-kysely'
 import {
   getEntityTypename,
   randomId,
@@ -6,6 +10,8 @@ import {
   type Entity,
   isEntityHandle,
   getEntityRef,
+  EntityPointer,
+  EntityRef,
 } from '@repliql/utils'
 import type { Operation, OperationResult, Exchange } from '@urql/core'
 import { executeExchange } from '@urql/exchange-execute'
@@ -22,6 +28,10 @@ type ResolverContext = {
   db: Database
   queryById: DataLoader<string, { id: string; data: unknown } | undefined>
   entityByRef: DataLoader<string, Entity | undefined>
+  filterEntityPointers: (
+    args: Parameters<Database['selectEntityPointersQuery']>[0],
+  ) => Promise<EntityPointer[]>
+  trackEntityVisit: (ref: string, fieldName: string) => void
 }
 
 export type Resolvers = Record<
@@ -41,6 +51,76 @@ export function repliqlExchange({ kysely, schema, resolvers }: RepliqlExchangeCo
       const db = new Database({ kysely })
       void db.migrate()
 
+      function watchOperation(operation: Operation) {
+        // Watch changes
+        const changeSubscriptions: ChangeSubscription<DatabaseSchema>[] =
+          operation.context.visits.changeSubscriptions
+
+        const watchedQueryIds = operation.context.visits.queries as string[]
+        if (watchedQueryIds.length) {
+          changeSubscriptions.push({
+            filter: {
+              queries: [
+                {
+                  id: { $in: watchedQueryIds },
+                },
+              ],
+            },
+            selection: {
+              queries: {
+                data: true,
+              },
+            },
+          })
+        }
+
+        const watchedEntities = operation.context.visits.entities as {
+          [key: string]: Set<string>
+        }
+        const refsByWatchedFields: Record<string, { refs: EntityRef[]; fields: string[] }> = {}
+
+        for (const [ref, fieldsSet] of Object.entries(watchedEntities)) {
+          const fields = [...fieldsSet].sort()
+          const key = JSON.stringify(fields)
+
+          refsByWatchedFields[key] ||= { refs: [], fields }
+          refsByWatchedFields[key].refs.push(ref as EntityRef)
+        }
+
+        for (const { refs, fields } of Object.values(refsByWatchedFields)) {
+          const data: Record<string, true> = {}
+
+          for (const field of fields) {
+            data[field] = true
+          }
+
+          changeSubscriptions.push({
+            filter: {
+              entities: [
+                {
+                  __ref: { $in: refs },
+                },
+              ],
+            },
+            selection: {
+              entities: {
+                data,
+              },
+            },
+          })
+        }
+
+        console.log(
+          '=========== watch ope',
+          operation.key,
+          JSON.stringify(changeSubscriptions, null, 2),
+        )
+      }
+
+      // function unwatchOperation(operationKey: number) {
+
+      // }
+
       /**
        * Will execute queries and mutations
        */
@@ -56,7 +136,7 @@ export function repliqlExchange({ kysely, schema, resolvers }: RepliqlExchangeCo
             },
           )
 
-          const entityByRef = new DataLoader<string, Entity | undefined>(async entityRefs => {
+          const entityByRef = new DataLoader<EntityRef, Entity | undefined>(async entityRefs => {
             console.time('=== LOAD ENTITY ' + entityRefs.join(', '))
             const entities = await db.getEntitiesByRef({ entityRefs })
             console.timeEnd('=== LOAD ENTITY ' + entityRefs.join(', '))
@@ -65,14 +145,46 @@ export function repliqlExchange({ kysely, schema, resolvers }: RepliqlExchangeCo
             )
           })
 
-          return { operation, db, queryById, entityByRef }
+          const visits: {
+            changeSubscriptions: ChangeSubscription<DatabaseSchema>[]
+            entities: { [key: string]: Set<string> }
+            queries: string[]
+          } = { entities: {}, queries: [], changeSubscriptions: [] }
+          operation.context.visits = visits
+
+          const trackEntityVisit = (ref: string, fieldName: string) => {
+            if (['__typename', 'id'].includes(fieldName)) {
+              // Typename and ID do not change, we don't need to watch them
+              return
+            }
+
+            visits.entities[ref] ||= new Set()
+            visits.entities[ref].add(fieldName)
+          }
+
+          const filterEntityPointers: ResolverContext['filterEntityPointers'] = async args => {
+            const query = db.selectEntityPointersQuery(args)
+
+            const changeSub = queryToChangeSubscription(query)
+            if (changeSub) {
+              visits.changeSubscriptions.push(changeSub)
+            }
+
+            return query.execute()
+          }
+
+          return { operation, db, queryById, entityByRef, trackEntityVisit, filterEntityPointers }
         },
         typeResolver: parent => {
           return parent ? getEntityTypename(parent) : undefined
         },
         fieldResolver: async (parent, args, ctx: ResolverContext, info) => {
+          const fieldName = getFullFieldName({ name: info.fieldName, args })
+
           if (isEntityHandle(parent)) {
-            const parentEntity = await ctx.entityByRef.load(getEntityRef(parent))
+            const ref = getEntityRef(parent)
+            ctx.trackEntityVisit(ref, fieldName)
+            const parentEntity = await ctx.entityByRef.load(ref)
             parent = parentEntity?.data
           }
 
@@ -81,10 +193,9 @@ export function repliqlExchange({ kysely, schema, resolvers }: RepliqlExchangeCo
             return resolver(parent, args, ctx, info)
           }
 
-          const fieldName = getFullFieldName({ name: info.fieldName, args })
-
           if (!parent) {
             if (info.path.typename === 'Query') {
+              ctx.operation.context.visits.queries.push(fieldName)
               const query = await ctx.queryById.load(fieldName)
               if (query) {
                 return query.data
@@ -121,15 +232,16 @@ export function repliqlExchange({ kysely, schema, resolvers }: RepliqlExchangeCo
         operations$,
         tap(op => console.time(`===== LOCAL RESOLUTION ${op.kind} ${op.key}`)),
         executeIO,
-        tap(op =>
-          console.timeEnd(`===== LOCAL RESOLUTION ${op.operation.kind} ${op.operation.key}`),
-        ),
-        tap(r => console.log('================== local hit', r.error, r.data)),
+        tap(r => {
+          console.timeEnd(`===== LOCAL RESOLUTION ${r.operation.kind} ${r.operation.key}`)
+          console.log('===== LOCAL HIT VISITS', r.operation.context.visits, r.error, r.data)
+        }),
       )
 
       const localHits$ = pipe(
         localResults$,
         filter(r => !r.error),
+        tap(({ operation }) => watchOperation(operation)),
       )
 
       const fetchResults$ = pipe(
