@@ -26,6 +26,8 @@ import type {
 
 import {
   type ChangeSubscription,
+  type ScalarMatch,
+  type ColumnMatch,
   MATCH_ALL,
   initChangeSubscription,
   matchAll,
@@ -66,9 +68,6 @@ type RootQueryNodeKind =
 
 type NonRootQueryNodeKind = Exclude<OperationNodeKind, RootQueryNodeKind>
 
-type ScalarMatch = typeof MATCH_ALL | { $in: Primitive[] }
-type ColumnMatch = ScalarMatch | { [field: string]: ScalarMatch }
-
 // Loose views of ChangeSubscription.{selection,filter} that we can iterate
 // generically regardless of the DB type parameter.
 type LooseSelection = Record<string, true | Record<string, true | Record<string, true>> | undefined>
@@ -80,6 +79,7 @@ type LooseFilter = Record<string, typeof MATCH_ALL | Record<string, ColumnMatch>
 type ColumnPredicate =
   | { kind: 'all' }
   | { kind: 'values'; values: Primitive[] }
+  | { kind: 'not-values'; values: Primitive[] }
   | { kind: 'fields'; fields: Map<string, ColumnPredicate> }
 
 // Internal representation of a WHERE conjunct (a single AND-chain after DNF).
@@ -123,12 +123,15 @@ function extractTableFromNode(node: OperationNode): { name: string; alias?: stri
 function predicateToColumnMatch(p: ColumnPredicate): ColumnMatch {
   if (p.kind === 'all') return MATCH_ALL
   if (p.kind === 'values') return { $in: p.values }
+  if (p.kind === 'not-values') return { $nin: p.values }
   const out: Record<string, ScalarMatch> = {}
   for (const [k, v] of p.fields) {
     if (v.kind === 'all') {
       out[k] = MATCH_ALL
     } else if (v.kind === 'values') {
       out[k] = { $in: v.values }
+    } else if (v.kind === 'not-values') {
+      out[k] = { $nin: v.values }
     } else {
       out[k] = MATCH_ALL
     }
@@ -690,7 +693,14 @@ class SelectChangeSubscriptionBuilder<DB> {
       return { kind: 'fields', fields: merged }
     }
     if (a.kind === 'fields' || b.kind === 'fields') return { kind: 'all' }
-    return { kind: 'values', values: [...a.values, ...b.values] }
+    if (a.kind === 'values' && b.kind === 'values') {
+      return { kind: 'values', values: [...a.values, ...b.values] }
+    }
+    if (a.kind === 'not-values' && b.kind === 'not-values') {
+      return { kind: 'not-values', values: [...a.values, ...b.values] }
+    }
+    // values ∧ not-values → keep the whitelist (narrower)
+    return a.kind === 'values' ? a : b
   }
 
   private processBinaryOp(node: BinaryOperationNode): Conjunct {
@@ -727,6 +737,13 @@ class SelectChangeSubscriptionBuilder<DB> {
     } else if (operator === 'in') {
       const vs = this.extractListValues(node.rightOperand)
       scalar = vs !== undefined ? { kind: 'values', values: vs as Primitive[] } : { kind: 'all' }
+    } else if (operator === '!=' || operator === '<>') {
+      const v = this.extractSingleValue(node.rightOperand)
+      scalar = v !== undefined ? { kind: 'not-values', values: [v as Primitive] } : { kind: 'all' }
+    } else if (operator === 'not in') {
+      const vs = this.extractListValues(node.rightOperand)
+      scalar =
+        vs !== undefined ? { kind: 'not-values', values: vs as Primitive[] } : { kind: 'all' }
     } else {
       scalar = { kind: 'all' }
     }
@@ -839,12 +856,15 @@ class SelectChangeSubscriptionBuilder<DB> {
 function columnMatchToPredicate(v: ColumnMatch): ColumnPredicate {
   if (v === MATCH_ALL) return { kind: 'all' }
   if ('$in' in v) return { kind: 'values', values: (v as { $in: Primitive[] }).$in }
+  if ('$nin' in v) return { kind: 'not-values', values: (v as { $nin: Primitive[] }).$nin }
   const fields = new Map<string, ColumnPredicate>()
   for (const [k, fv] of Object.entries(v)) {
     if (fv === MATCH_ALL) {
       fields.set(k, { kind: 'all' })
-    } else {
+    } else if ('$in' in fv) {
       fields.set(k, { kind: 'values', values: fv.$in })
+    } else {
+      fields.set(k, { kind: 'not-values', values: (fv as { $nin: Primitive[] }).$nin })
     }
   }
   return { kind: 'fields', fields }
@@ -863,7 +883,7 @@ function filterDedupeKey(filter: Record<string, ColumnMatch>): Record<string, un
 
 function columnMatchDedupe(v: ColumnMatch): unknown {
   if (v === MATCH_ALL) return '__MATCH_ALL__'
-  if ('$in' in v) return v
+  if ('$in' in v || '$nin' in v) return v
   const out: Record<string, unknown> = {}
   for (const [k, fv] of Object.entries(v)) {
     out[k] = fv === MATCH_ALL ? '__MATCH_ALL__' : fv

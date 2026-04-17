@@ -137,7 +137,8 @@ type ChangeSubscription<DB> = {
 
 - `'*'` — match any value (from `>`, `<`, `like`, etc.)
 - `{ $in: [...] }` — match specific values (from `=` or `IN`)
-- `{ [field]: '*' | { $in: [...] } }` — JSON field matching
+- `{ $nin: [...] }` — exclude specific values (from `!=`, `<>`, or `NOT IN`)
+- `{ [field]: '*' | { $in: [...] } | { $nin: [...] } }` — JSON field matching
 
 ## How it works
 
@@ -159,7 +160,7 @@ The WHERE clause is normalized to **disjunctive normal form** (OR of ANDs), and 
 
 ### Coverage
 
-- **`=` and `IN`** produce `{ $in: [...] }`. Other operators (`>`, `<`, `like`, …) widen to `'*'`.
+- **`=` and `IN`** produce `{ $in: [...] }`. **`!=`, `<>`, and `NOT IN`** produce `{ $nin: [...] }`. Other operators (`>`, `<`, `like`, …) widen to `'*'`.
 - **Table aliases** (`users as u`) are resolved to real names. **Column aliases** (`id as uid`) are unwrapped.
 - **JOINs**: inner/cross joins are mandatory — a change to a joined row can add/remove outer rows. Left/right/full joins don't count as mandatory.
 - **No WHERE clause**: falls back to a wide filter on every projected / mandatory-joined table.

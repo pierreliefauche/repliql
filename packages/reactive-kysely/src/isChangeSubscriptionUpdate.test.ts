@@ -48,6 +48,18 @@ const subIdEq1: ChangeSubscription<DB> = matchTable(
   { id: { $in: [1] } },
 )
 
+const subIdNin1: ChangeSubscription<DB> = matchTable(
+  selectTable(initChangeSubscription<DB>(), 'users', { id: true, name: true }),
+  'users',
+  { id: { $nin: [1] } },
+)
+
+const subFooNin42: ChangeSubscription<DB> = matchTable(
+  selectAll(initChangeSubscription<DB>()),
+  'users',
+  { data: { foo: { $nin: [42] } } },
+)
+
 const subJsonField: ChangeSubscription<DB> = matchAllTable(
   selectTable(initChangeSubscription<DB>(), 'users', { data: { foo: true } }),
   'users',
@@ -314,6 +326,108 @@ const tests: TestCase[] = [
       table: 'users',
       oldRow: null,
       newRow: user({ data: { foo: 1, bar: 9 } }),
+    },
+    result: false,
+  },
+
+  // ---- $nin column predicate ----
+  {
+    it: '$nin filter: row with excluded value → false',
+    sub: subIdNin1,
+    update: {
+      table: 'users',
+      oldRow: user({ id: 1, name: 'a' }),
+      newRow: user({ id: 1, name: 'b' }),
+    },
+    result: false,
+  },
+  {
+    it: '$nin filter: both rows outside excluded set, selected col changes → true',
+    sub: subIdNin1,
+    update: {
+      table: 'users',
+      oldRow: user({ id: 2, name: 'a' }),
+      newRow: user({ id: 2, name: 'b' }),
+    },
+    result: true,
+  },
+  {
+    it: '$nin filter: transition into excluded set (was visible, now hidden) → true',
+    sub: subIdNin1,
+    update: { table: 'users', oldRow: user({ id: 2 }), newRow: user({ id: 1 }) },
+    result: true,
+  },
+  {
+    it: '$nin filter: transition out of excluded set (was hidden, now visible) → true',
+    sub: subIdNin1,
+    update: { table: 'users', oldRow: user({ id: 1 }), newRow: user({ id: 2 }) },
+    result: true,
+  },
+  {
+    it: '$nin filter: outside excluded set, only unselected column changes → false',
+    sub: subIdNin1,
+    update: {
+      table: 'users',
+      oldRow: user({ id: 2, age: 1 }),
+      newRow: user({ id: 2, age: 99 }),
+    },
+    result: false,
+  },
+
+  // ---- $nin on JSON field ----
+  {
+    it: '$nin JSON field: foo 42→43 (into matched set) → true',
+    sub: subFooNin42,
+    update: {
+      table: 'users',
+      oldRow: user({ data: { foo: 42, bar: 0 } }),
+      newRow: user({ data: { foo: 43, bar: 0 } }),
+    },
+    result: true,
+  },
+  {
+    it: '$nin JSON field: foo 42→42 (stays excluded) → false',
+    sub: subFooNin42,
+    update: {
+      table: 'users',
+      oldRow: user({ data: { foo: 42, bar: 0 } }),
+      newRow: user({ data: { foo: 42, bar: 1 } }),
+    },
+    result: false,
+  },
+  {
+    it: '$nin JSON field: foo 7→8 (both outside set, bar also changes) → true',
+    sub: subFooNin42,
+    update: {
+      table: 'users',
+      oldRow: user({ data: { foo: 7, bar: 0 } }),
+      newRow: user({ data: { foo: 8, bar: 0 } }),
+    },
+    result: true,
+  },
+
+  // ---- combined $in + $nin on same column ----
+  {
+    it: '$in+$nin combined: matches whitelist AND not in blacklist → true',
+    sub: matchTable(selectAll(initChangeSubscription<DB>()), 'users', {
+      data: { foo: { $in: [1] }, bar: { $nin: [2] } },
+    }),
+    update: {
+      table: 'users',
+      oldRow: null,
+      newRow: user({ data: { foo: 1, bar: 3 } }),
+    },
+    result: true,
+  },
+  {
+    it: '$in+$nin combined: matches whitelist but IS in blacklist → false',
+    sub: matchTable(selectAll(initChangeSubscription<DB>()), 'users', {
+      data: { foo: { $in: [1] }, bar: { $nin: [2] } },
+    }),
+    update: {
+      table: 'users',
+      oldRow: null,
+      newRow: user({ data: { foo: 1, bar: 2 } }),
     },
     result: false,
   },

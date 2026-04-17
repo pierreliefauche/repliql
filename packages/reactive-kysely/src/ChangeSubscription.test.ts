@@ -207,6 +207,31 @@ describe('matchTable', () => {
     })
   })
 
+  it('supports $nin as a column-level value match', () => {
+    const sub = matchTable(initChangeSubscription<DB>(), 'users', {
+      id: { $nin: [1] },
+    })
+    expect(sub.filter).toEqual({ users: [{ id: { $nin: [1] } }] })
+  })
+
+  it('supports $nin at the JSON field level', () => {
+    const sub = matchTable(initChangeSubscription<DB>(), 'users', {
+      data: { foo: { $nin: [1] } },
+    })
+    expect(sub.filter).toEqual({
+      users: [{ data: { foo: { $nin: [1] } } }],
+    })
+  })
+
+  it('keeps $in and $nin entries as separate disjuncts', () => {
+    let sub = initChangeSubscription<DB>()
+    sub = matchTable(sub, 'users', { id: { $in: [1] } })
+    sub = matchTable(sub, 'users', { id: { $nin: [9] } })
+    expect(sub.filter).toEqual({
+      users: [{ id: { $in: [1] } }, { id: { $nin: [9] } }],
+    })
+  })
+
   it('no-ops when filter is already globally MATCH_ALL', () => {
     const base = matchAll(initChangeSubscription<DB>())
     const sub = matchTable(base, 'users', { id: { $in: [1] } })

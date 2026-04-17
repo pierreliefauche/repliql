@@ -180,6 +180,91 @@ const tests: TestCase[] = [
     },
   },
   {
+    it: 'WHERE with != operator → $nin',
+    query: db.selectFrom('users').select('id').where('name', '!=', 'John'),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ name: { $nin: ['John'] } }] },
+    },
+  },
+  {
+    it: 'WHERE with <> operator → $nin',
+    query: db.selectFrom('users').select('id').where('name', '<>', 'John'),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ name: { $nin: ['John'] } }] },
+    },
+  },
+  {
+    it: 'WHERE with not in operator → $nin',
+    query: db.selectFrom('users').select('id').where('name', 'not in', ['Alice', 'Bob']),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ name: { $nin: ['Alice', 'Bob'] } }] },
+    },
+  },
+  {
+    it: 'AND of = and != on different columns — merged into one entry with $in and $nin',
+    query: db.selectFrom('users').select('id').where('name', '=', 'John').where('age', '!=', 30),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [{ name: { $in: ['John'] }, age: { $nin: [30] } }],
+      },
+    },
+  },
+  {
+    it: 'AND of two != on same column — $nin values accumulate',
+    query: db.selectFrom('users').select('id').where('id', '!=', 1).where('id', '!=', 2),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ id: { $nin: [1, 2] } }] },
+    },
+  },
+  {
+    it: 'AND of = and != on same column — whitelist wins',
+    query: db.selectFrom('users').select('id').where('id', '=', 1).where('id', '!=', 2),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ id: { $in: [1] } }] },
+    },
+  },
+  {
+    it: 'OR of = and != on different columns — two entries',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.or([eb('name', '=', 'John'), eb('age', '!=', 30)])),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [{ name: { $in: ['John'] } }, { age: { $nin: [30] } }],
+      },
+    },
+  },
+  {
+    it: 'identical != disjuncts dedupe to one entry',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.or([eb('name', '!=', 'John'), eb('name', '!=', 'John')])),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ name: { $nin: ['John'] } }] },
+    },
+  },
+  {
+    it: 'JSON field with != → $nin on field',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('referral'), '!=', 'alice'),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ metadata: { referral: { $nin: ['alice'] } } }] },
+    },
+  },
+  {
     it: 'multiple WHERE (AND) — merged into one narrow filter entry',
     query: db.selectFrom('users').select('id').where('name', '=', 'John').where('age', '>', 18),
     result: {

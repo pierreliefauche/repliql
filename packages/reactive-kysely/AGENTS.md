@@ -113,15 +113,17 @@ Column predicates within a filter entry:
 
 - `'*'` — match any value
 - `{ $in: Primitive[] }` — match specific values (from `=` or `IN` operators)
-- `{ [field]: '*' | { $in: [...] } }` — JSON field matching
+- `{ $nin: Primitive[] }` — exclude specific values (from `!=`, `<>`, or `NOT IN`)
+- `{ [field]: '*' | { $in: [...] } | { $nin: [...] } }` — JSON field matching
 
 ### Design decisions
 
 These were explicitly discussed and agreed upon. Don't change them without checking with the user.
 
 - **DNF normalisation**: WHERE is converted to OR-of-ANDs. Each AND-branch becomes a filter entry (or one entry per table it touches).
-- **`=` and `IN` extract literal values** into `{ $in: [...] }`. All other operators widen to `'*'`.
-- **NOT X**: preserves column references but widens their value predicates (a negated `=` no longer pins a value).
+- **`=` and `IN` extract literal values** into `{ $in: [...] }`. **`!=`, `<>`, and `NOT IN` extract literal values** into `{ $nin: [...] }`. All other operators widen to `'*'`.
+- **AND-merge on same column**: two `$in` predicates union their values; two `$nin` predicates union theirs; a `$in` AND a `$nin` keeps the `$in` (the whitelist is narrower).
+- **NOT X** (outer `NOT (...)` around a compound expression): preserves column references but widens their value predicates. Leaf `!=` / `<>` / `NOT IN` are handled as `$nin` directly — the widening only applies to structural NOT that can't be pushed to leaves.
 - **Mandatory joins** (inner, cross, lateral inner) contribute to the no-WHERE fallback scope. Left/right/full joins do NOT — missing rows just become NULL-padded.
 - **No WHERE**: fallback emits a wide filter for every selected and mandatory-joined table (minus tables already covered by an absorbed subquery/CTE).
 - **HAVING** adds a disjunct covering every queried table (row-level matching is conservative for grouped queries).

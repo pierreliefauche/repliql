@@ -57,5 +57,6 @@
   "oxc.fmt.configPath": ".oxfmtrc.jsonc",
   "chat.tools.terminal.autoApprove": {
     "bun": true
-  }
+  },
+  "js/ts.experimental.useTsgo": true
 }

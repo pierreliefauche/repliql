@@ -7,6 +7,7 @@ import {
   SqliteDialect,
   sql,
   type SqlBool,
+  ColumnType,
 } from 'kysely'
 import { Database } from 'node-sqlite3-wasm'
 import { pipe, subscribe, type Source, type Subscription } from 'wonka'
@@ -17,7 +18,7 @@ interface Users {
   id: number
   name: string
   age: number
-  metadata: string | null
+  metadata: ColumnType<{ tier?: string } | null, string | null, string | null>
 }
 
 interface Posts {
@@ -353,9 +354,7 @@ describe('ReactiveKysely — advanced queries (JSON fields)', () => {
 
     const { emissions, unsubscribe } = collect(db.liveQuery(query))
     await flush()
-    expect(emissions[0]).toEqual([
-      { id: 1, name: 'alice', age: 30, metadata: JSON.stringify({ tier: 'pro' }) },
-    ])
+    expect(emissions[0]).toEqual([{ id: 1, name: 'alice', age: 30, metadata: { tier: 'pro' } }])
 
     await db
       .updateTable('users')
@@ -364,8 +363,8 @@ describe('ReactiveKysely — advanced queries (JSON fields)', () => {
       .execute()
     await flush()
     expect(emissions.at(-1)).toEqual([
-      { id: 1, name: 'alice', age: 30, metadata: JSON.stringify({ tier: 'pro' }) },
-      { id: 2, name: 'bob', age: 25, metadata: JSON.stringify({ tier: 'pro' }) },
+      { id: 1, name: 'alice', age: 30, metadata: { tier: 'pro' } },
+      { id: 2, name: 'bob', age: 25, metadata: { tier: 'pro' } },
     ])
 
     await db
@@ -374,9 +373,7 @@ describe('ReactiveKysely — advanced queries (JSON fields)', () => {
       .where('id', '=', 1)
       .execute()
     await flush()
-    expect(emissions.at(-1)).toEqual([
-      { id: 2, name: 'bob', age: 25, metadata: JSON.stringify({ tier: 'pro' }) },
-    ])
+    expect(emissions.at(-1)).toEqual([{ id: 2, name: 'bob', age: 25, metadata: { tier: 'pro' } }])
 
     unsubscribe()
   })
@@ -1000,9 +997,7 @@ describe('ReactiveKysely — null handling', () => {
       .where('id', '=', 1)
       .execute()
     await flush()
-    expect(emissions.at(-1)).toEqual([
-      { id: 1, name: 'alice', age: 30, metadata: JSON.stringify({ tier: 'pro' }) },
-    ])
+    expect(emissions.at(-1)).toEqual([{ id: 1, name: 'alice', age: 30, metadata: { tier: 'pro' } }])
 
     // JSON -> null
     await db.updateTable('users').set({ metadata: null }).where('id', '=', 1).execute()

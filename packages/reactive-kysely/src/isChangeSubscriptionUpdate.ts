@@ -8,10 +8,12 @@ type AnyRow = Record<string, unknown>
 type CompiledFilterField =
   | { key: string; type: 'all' }
   | { key: string; type: 'values'; set: Set<string> }
+  | { key: string; type: 'not-values'; set: Set<string> }
 
 type CompiledFilterColumn =
   | { col: string; type: 'all' }
   | { col: string; type: 'values'; set: Set<string> }
+  | { col: string; type: 'not-values'; set: Set<string> }
   | { col: string; type: 'fields'; fields: CompiledFilterField[] }
 
 type CompiledFilterEntry = { columns: CompiledFilterColumn[] }
@@ -94,6 +96,9 @@ function compileFilterColumn(col: string, value: unknown): CompiledFilterColumn 
   if (isInMatch(value)) {
     return { col, type: 'values', set: new Set(value.$in.map(v => stableStringify(v))) }
   }
+  if (isNinMatch(value)) {
+    return { col, type: 'not-values', set: new Set(value.$nin.map(v => stableStringify(v))) }
+  }
   const fields: CompiledFilterField[] = []
   for (const [key, f] of Object.entries(value as Record<string, unknown>)) {
     if (f === undefined) {
@@ -108,12 +113,19 @@ function compileFilterField(key: string, f: unknown): CompiledFilterField {
   if (f === MATCH_ALL) {
     return { key, type: 'all' }
   }
+  if (isNinMatch(f)) {
+    return { key, type: 'not-values', set: new Set(f.$nin.map(v => stableStringify(v))) }
+  }
   const inMatch = f as { $in: unknown[] }
   return { key, type: 'values', set: new Set(inMatch.$in.map(v => stableStringify(v))) }
 }
 
 function isInMatch(v: unknown): v is { $in: unknown[] } {
   return typeof v === 'object' && v !== null && '$in' in v && Array.isArray((v as any).$in)
+}
+
+function isNinMatch(v: unknown): v is { $nin: unknown[] } {
+  return typeof v === 'object' && v !== null && '$nin' in v && Array.isArray((v as any).$nin)
 }
 
 function compileTableSelection(sel: Record<string, unknown>): CompiledTableSelection {
@@ -184,6 +196,9 @@ function matchAllColumns(columns: CompiledFilterColumn[], row: AnyRow): boolean 
     if (columnMatcher.type === 'values') {
       return columnMatcher.set.has(stableStringify(columnValue))
     }
+    if (columnMatcher.type === 'not-values') {
+      return !columnMatcher.set.has(stableStringify(columnValue))
+    }
 
     columnMatcher.type satisfies 'fields'
 
@@ -200,10 +215,16 @@ function matchAllFields(fields: CompiledFilterField[], obj: AnyRow): boolean {
     if (field.type === 'all') {
       return true
     }
+    if (field.type === 'values') {
+      return field.set.has(stableStringify(obj[field.key]))
+    }
 
-    field.type satisfies 'values'
+    if (field.type === 'not-values') {
+      return !field.set.has(stableStringify(obj[field.key]))
+    }
 
-    return field.set.has(stableStringify(obj[field.key]))
+    field satisfies never
+    return true
   })
 }
 

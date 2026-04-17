@@ -14,17 +14,20 @@ type TableColumnsSelection<DB, Table extends AnyTable<DB>> = {
       }
 }
 
-type ValueMatch =
+export type ScalarMatch =
   | MatchAll // match any value
   | { $in: Primitive[] } // match specific values with equality (only for primitives)
+  | { $nin: Primitive[] } // match specific values with INequality (only for primitives)
+
+export type ColumnMatch =
+  | ScalarMatch
+  | {
+      // match specific fields for columns that are JSON
+      [Field in string]?: ScalarMatch
+    }
 
 type TableColumnsFilter<DB, Table extends AnyTable<DB>> = {
-  [Column in keyof DB[Table]]?:
-    | ValueMatch
-    | {
-        // match specific fields for columns that are JSON
-        [Field in string]?: ValueMatch
-      }
+  [Column in keyof DB[Table]]?: ColumnMatch
 }
 
 export type ChangeSubscription<DB> = {
