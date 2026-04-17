@@ -18,7 +18,14 @@ interface Users {
   id: number
   name: string
   age: number
-  metadata: ColumnType<{ tier?: string } | null, string | null, string | null>
+  metadata: ColumnType<
+    {
+      tier?: string
+      nested?: { deep?: { value?: number; label?: string } }
+    } | null,
+    string | null,
+    string | null
+  >
 }
 
 interface Posts {
@@ -1294,6 +1301,292 @@ describe('ReactiveKysely — IN clause', () => {
     await db.updateTable('users').set({ name: 'chuck' }).where('id', '=', 3).execute()
     await flush()
     expect(emissions.length).toBe(countBefore)
+
+    unsubscribe()
+  })
+})
+
+describe('ReactiveKysely — $nin support', () => {
+  it('filters rows with scalar `!=` and flips membership on mutation', async () => {
+    await db.insertInto('users').values({ id: 1, name: 'alice', age: 30, metadata: null }).execute()
+    await db.insertInto('users').values({ id: 2, name: 'bob', age: 25, metadata: null }).execute()
+
+    const query = db.selectFrom('users').selectAll().where('age', '!=', 30).orderBy('id')
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(query))
+    await flush()
+    expect(emissions[0]).toEqual([{ id: 2, name: 'bob', age: 25, metadata: null }])
+
+    // bob's age flips to 30 → leaves the set
+    await db.updateTable('users').set({ age: 30 }).where('id', '=', 2).execute()
+    await flush()
+    expect(emissions.at(-1)).toEqual([])
+
+    // alice's age flips off 30 → enters the set
+    await db.updateTable('users').set({ age: 28 }).where('id', '=', 1).execute()
+    await flush()
+    expect(emissions.at(-1)).toEqual([{ id: 1, name: 'alice', age: 28, metadata: null }])
+
+    unsubscribe()
+  })
+
+  it('blocks refetch when inserted row is excluded by `!=`', async () => {
+    await db.insertInto('users').values({ id: 1, name: 'alice', age: 30, metadata: null }).execute()
+
+    const query = db.selectFrom('users').select(['id', 'name', 'age']).where('age', '!=', 100)
+
+    const { unsubscribe } = collect(db.liveQuery(query))
+    await flush()
+
+    db.executeQueryCount = 0
+    await db.insertInto('users').values({ id: 2, name: 'bob', age: 100, metadata: null }).execute()
+    await flush()
+    expect(db.executeQueryCount).toBe(0)
+
+    // An insert that isn't excluded should still trigger
+    await db.insertInto('users').values({ id: 3, name: 'carol', age: 27, metadata: null }).execute()
+    await flush()
+    expect(db.executeQueryCount).toBe(1)
+
+    unsubscribe()
+  })
+
+  it('filters rows with `not in` and a multi-value exclusion list', async () => {
+    await db.insertInto('users').values({ id: 1, name: 'alice', age: 30, metadata: null }).execute()
+    await db.insertInto('users').values({ id: 2, name: 'bob', age: 25, metadata: null }).execute()
+    await db
+      .insertInto('users')
+      .values({ id: 3, name: 'charlie', age: 40, metadata: null })
+      .execute()
+
+    const query = db.selectFrom('users').selectAll().where('age', 'not in', [25, 30]).orderBy('id')
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(query))
+    await flush()
+    expect(emissions[0]).toEqual([{ id: 3, name: 'charlie', age: 40, metadata: null }])
+
+    // Move bob into the excluded set → stays excluded (still not matching)
+    db.executeQueryCount = 0
+    await db.updateTable('users').set({ age: 30 }).where('id', '=', 2).execute()
+    await flush()
+    // Both old (25) and new (30) are in excluded list → no refetch
+    expect(db.executeQueryCount).toBe(0)
+
+    // Flip charlie into the excluded set → leaves result
+    await db.updateTable('users').set({ age: 25 }).where('id', '=', 3).execute()
+    await flush()
+    expect(emissions.at(-1)).toEqual([])
+
+    unsubscribe()
+  })
+
+  it('filters with `!=` on a JSON field', async () => {
+    await db
+      .insertInto('users')
+      .values({ id: 1, name: 'alice', age: 30, metadata: JSON.stringify({ tier: 'pro' }) })
+      .execute()
+    await db
+      .insertInto('users')
+      .values({ id: 2, name: 'bob', age: 25, metadata: JSON.stringify({ tier: 'free' }) })
+      .execute()
+
+    const query = db
+      .selectFrom('users')
+      .selectAll()
+      .where(sql`json_extract(metadata, '$.tier')`, '!=', 'free')
+      .orderBy('id')
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(query))
+    await flush()
+    expect(emissions[0]).toEqual([{ id: 1, name: 'alice', age: 30, metadata: { tier: 'pro' } }])
+
+    // Bob flips to pro → enters the result set
+    await db
+      .updateTable('users')
+      .set({ metadata: JSON.stringify({ tier: 'pro' }) })
+      .where('id', '=', 2)
+      .execute()
+    await flush()
+    expect(emissions.at(-1)).toEqual([
+      { id: 1, name: 'alice', age: 30, metadata: { tier: 'pro' } },
+      { id: 2, name: 'bob', age: 25, metadata: { tier: 'pro' } },
+    ])
+
+    // Alice flips to free → leaves the result set
+    await db
+      .updateTable('users')
+      .set({ metadata: JSON.stringify({ tier: 'free' }) })
+      .where('id', '=', 1)
+      .execute()
+    await flush()
+    expect(emissions.at(-1)).toEqual([{ id: 2, name: 'bob', age: 25, metadata: { tier: 'pro' } }])
+
+    unsubscribe()
+  })
+})
+
+describe('ReactiveKysely — arbitrary-depth JSON matching', () => {
+  it('filters rows with a 3-level JSON `=` predicate and flips membership on deep mutation', async () => {
+    await db
+      .insertInto('users')
+      .values({
+        id: 1,
+        name: 'alice',
+        age: 30,
+        metadata: JSON.stringify({ nested: { deep: { value: 42, label: 'a' } } }),
+      })
+      .execute()
+    await db
+      .insertInto('users')
+      .values({
+        id: 2,
+        name: 'bob',
+        age: 25,
+        metadata: JSON.stringify({ nested: { deep: { value: 7, label: 'b' } } }),
+      })
+      .execute()
+
+    const query = db
+      .selectFrom('users')
+      .selectAll()
+      .where(sql`json_extract(metadata, '$.nested.deep.value')`, '=', 42)
+      .orderBy('id')
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(query))
+    await flush()
+    expect(emissions[0]).toEqual([
+      {
+        id: 1,
+        name: 'alice',
+        age: 30,
+        metadata: { nested: { deep: { value: 42, label: 'a' } } },
+      },
+    ])
+
+    // Flip bob's deep value to 42 → enters result
+    await db
+      .updateTable('users')
+      .set({ metadata: JSON.stringify({ nested: { deep: { value: 42, label: 'b' } } }) })
+      .where('id', '=', 2)
+      .execute()
+    await flush()
+    expect(emissions.at(-1)).toEqual([
+      {
+        id: 1,
+        name: 'alice',
+        age: 30,
+        metadata: { nested: { deep: { value: 42, label: 'a' } } },
+      },
+      {
+        id: 2,
+        name: 'bob',
+        age: 25,
+        metadata: { nested: { deep: { value: 42, label: 'b' } } },
+      },
+    ])
+
+    // Flip alice's deep value away from 42 → leaves result
+    await db
+      .updateTable('users')
+      .set({ metadata: JSON.stringify({ nested: { deep: { value: 0, label: 'a' } } }) })
+      .where('id', '=', 1)
+      .execute()
+    await flush()
+    expect(emissions.at(-1)).toEqual([
+      {
+        id: 2,
+        name: 'bob',
+        age: 25,
+        metadata: { nested: { deep: { value: 42, label: 'b' } } },
+      },
+    ])
+
+    unsubscribe()
+  })
+
+  it('refetches when filtered JSON field changes with raw SQL WHERE', async () => {
+    // NOTE: When using raw SQL in WHERE (e.g., json_extract), the change subscription
+    // cannot parse the specific JSON path. It falls back to table-wide matching.
+    // This test verifies that changes to the metadata column trigger refetches.
+    await db
+      .insertInto('users')
+      .values({
+        id: 1,
+        name: 'alice',
+        age: 30,
+        metadata: JSON.stringify({ nested: { deep: { value: 42, label: 'a' } } }),
+      })
+      .execute()
+
+    // Using selectAll so metadata changes are detected in selection
+    const query = db
+      .selectFrom('users')
+      .selectAll()
+      .where(sql`json_extract(metadata, '$.nested.deep.value')`, '=', 42)
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(query))
+    await flush()
+    expect(emissions[0]).toHaveLength(1)
+
+    db.executeQueryCount = 0
+    // Change the filtered value so row leaves result set
+    await db
+      .updateTable('users')
+      .set({ metadata: JSON.stringify({ nested: { deep: { value: 99, label: 'a' } } }) })
+      .where('id', '=', 1)
+      .execute()
+    await flush()
+    expect(db.executeQueryCount).toBe(1)
+    expect(emissions.at(-1)).toHaveLength(0)
+
+    unsubscribe()
+  })
+
+  it('filters with 3-level JSON `!=` and flips on deep mutation', async () => {
+    await db
+      .insertInto('users')
+      .values({
+        id: 1,
+        name: 'alice',
+        age: 30,
+        metadata: JSON.stringify({ nested: { deep: { value: 1, label: 'keep' } } }),
+      })
+      .execute()
+    await db
+      .insertInto('users')
+      .values({
+        id: 2,
+        name: 'bob',
+        age: 25,
+        metadata: JSON.stringify({ nested: { deep: { value: 2, label: 'skip' } } }),
+      })
+      .execute()
+
+    const query = db
+      .selectFrom('users')
+      .selectAll()
+      .where(sql`json_extract(metadata, '$.nested.deep.label')`, '!=', 'skip')
+      .orderBy('id')
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(query))
+    await flush()
+    expect(emissions[0]).toEqual([
+      {
+        id: 1,
+        name: 'alice',
+        age: 30,
+        metadata: { nested: { deep: { value: 1, label: 'keep' } } },
+      },
+    ])
+
+    // bob flips label away from 'skip' → enters
+    await db
+      .updateTable('users')
+      .set({ metadata: JSON.stringify({ nested: { deep: { value: 2, label: 'ok' } } }) })
+      .where('id', '=', 2)
+      .execute()
+    await flush()
+    expect(emissions.at(-1)).toHaveLength(2)
 
     unsubscribe()
   })

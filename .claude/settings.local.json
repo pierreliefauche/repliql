@@ -7,7 +7,9 @@
       "WebFetch(domain:sqlocal.dev)",
       "WebSearch",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(bunx tsc *)",
+      "Bash(bun test *)"
     ]
   }
 }

@@ -132,7 +132,7 @@ These were explicitly discussed and agreed upon. Don't change them without check
 - **Aliases**: table aliases resolve to real names (`users as u`), column aliases are unwrapped (`id as uid`).
 - **Unqualified columns** in a single-table query resolve to that table; in multi-table queries they're applied to every queried table at emit time.
 - **ORDER BY columns** are tracked in selection (changes to order-by columns can affect result ordering).
-- **JSON field access** (`column->>'field'`) tracks the specific field path; deeper paths (>1 level) widen to match any value in the top-level field.
+- **JSON field access** (`column->>'field'`, nested `->` / `->>` / path chains) tracks the full field path at arbitrary depth. `ColumnMatch` / `FieldMatch` are recursive, so a WHERE on `metadata->'a'->'b'->>'c'` compiles to `{ metadata: { a: { b: { c: { $in: [...] } } } } }`. Non-string path legs (array index, non-literal) still cause the whole path to widen to the column level.
 - **Raw SQL / unrecognized predicate**: conservatively widens to match any row in every queried table.
 - **Exhaustive kind checking** uses `node.kind satisfies NonRootQueryNodeKind` in the default branch of the root switch, so new Kysely root query kinds trip a compile error.
 

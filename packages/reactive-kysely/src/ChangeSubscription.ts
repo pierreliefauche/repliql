@@ -19,17 +19,9 @@ export type ScalarMatch =
   | { $in: Primitive[] } // match specific values with equality (only for primitives)
   | { $nin: Primitive[] } // match specific values with INequality (only for primitives)
 
-export type ColumnMatch =
-  | ScalarMatch
-  | {
-      // match specific fields for columns that are JSON
-      [Field: string]:
-        | ScalarMatch
-        | {
-            // match specific fields for fields that are JSON objects
-            [Field: string]: ScalarMatch
-          }
-    }
+export type FieldMatch = ScalarMatch | { [Field: string]: FieldMatch }
+
+export type ColumnMatch = ScalarMatch | { [Field: string]: FieldMatch }
 
 type TableColumnsFilter<DB, Table extends AnyTable<DB>> = {
   [Column in keyof DB[Table]]?: ColumnMatch

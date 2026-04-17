@@ -19,7 +19,12 @@ interface Users {
   id: number
   name: string
   age: number
-  data: { foo: number; bar: number; nested?: { x: number; y: number } } | null
+  data: {
+    foo: number
+    bar: number
+    nested?: { x: number; y: number }
+    deep?: { level2: { level3: { leaf: number; label: string } } }
+  } | null
 }
 
 interface Posts {
@@ -528,6 +533,98 @@ const tests: TestCase[] = [
       newRow: user({ data: { foo: 1, bar: 0, nested: { x: 99, y: 9 } } }),
     },
     result: false,
+  },
+
+  // ---- 3-level nested field matchers ----
+  {
+    it: '3-level $in: deepest leaf matches → true',
+    sub: matchTable(selectAll(initChangeSubscription<DB>()), 'users', {
+      data: { deep: { level2: { level3: { leaf: { $in: [7] } } } } },
+    }),
+    update: {
+      table: 'users',
+      oldRow: null,
+      newRow: user({
+        data: {
+          foo: 0,
+          bar: 0,
+          deep: { level2: { level3: { leaf: 7, label: 'x' } } },
+        },
+      }),
+    },
+    result: true,
+  },
+  {
+    it: '3-level $in: deepest leaf does not match → false',
+    sub: matchTable(selectAll(initChangeSubscription<DB>()), 'users', {
+      data: { deep: { level2: { level3: { leaf: { $in: [7] } } } } },
+    }),
+    update: {
+      table: 'users',
+      oldRow: null,
+      newRow: user({
+        data: {
+          foo: 0,
+          bar: 0,
+          deep: { level2: { level3: { leaf: 8, label: 'x' } } },
+        },
+      }),
+    },
+    result: false,
+  },
+  {
+    it: '3-level $nin: excluded leaf → false',
+    sub: matchTable(selectAll(initChangeSubscription<DB>()), 'users', {
+      data: { deep: { level2: { level3: { leaf: { $nin: [7] } } } } },
+    }),
+    update: {
+      table: 'users',
+      oldRow: null,
+      newRow: user({
+        data: {
+          foo: 0,
+          bar: 0,
+          deep: { level2: { level3: { leaf: 7, label: 'x' } } },
+        },
+      }),
+    },
+    result: false,
+  },
+  {
+    it: '3-level: intermediate field missing → false',
+    sub: matchTable(selectAll(initChangeSubscription<DB>()), 'users', {
+      data: { deep: { level2: { level3: { leaf: { $in: [7] } } } } },
+    }),
+    update: {
+      table: 'users',
+      oldRow: null,
+      newRow: user({ data: { foo: 0, bar: 0 } }),
+    },
+    result: false,
+  },
+  {
+    it: '3-level: sibling leaf change under same depth still matches filter and selection differs → true',
+    sub: matchTable(selectAll(initChangeSubscription<DB>()), 'users', {
+      data: { deep: { level2: { level3: { leaf: MATCH_ALL } } } },
+    }),
+    update: {
+      table: 'users',
+      oldRow: user({
+        data: {
+          foo: 0,
+          bar: 0,
+          deep: { level2: { level3: { leaf: 7, label: 'a' } } },
+        },
+      }),
+      newRow: user({
+        data: {
+          foo: 0,
+          bar: 0,
+          deep: { level2: { level3: { leaf: 7, label: 'b' } } },
+        },
+      }),
+    },
+    result: true,
   },
 
   // ---- MATCH_ALL column predicate + narrow selection ----

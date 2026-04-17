@@ -26,6 +26,12 @@ interface Users {
       loginAt: number | null
       createdAt: number
     }
+    nested: {
+      deep: {
+        value: number
+        label: string
+      }
+    }
   }
 }
 
@@ -913,6 +919,115 @@ const tests: TestCase[] = [
                 createdAt: { $in: [1] },
                 loginAt: { $in: [2] },
               },
+            },
+          },
+        ],
+      },
+    },
+  },
+  {
+    it: '3-level JSON = WHERE — deepest subfield scalar preserved',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(
+        eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'),
+        '=',
+        42,
+      ),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [{ metadata: { nested: { deep: { value: { $in: [42] } } } } }],
+      },
+    },
+  },
+  {
+    it: '3-level JSON != WHERE → $nin at deepest',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(
+        eb => eb.ref('metadata', '->').key('nested').key('deep').key('label'),
+        '!=',
+        'x',
+      ),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [{ metadata: { nested: { deep: { label: { $nin: ['x'] } } } } }],
+      },
+    },
+  },
+  {
+    it: '3-level JSON > WHERE — non-equality widens only the deepest leaf',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(
+        eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'),
+        '>',
+        0,
+      ),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [{ metadata: { nested: { deep: { value: MATCH_ALL } } } }],
+      },
+    },
+  },
+  {
+    it: 'AND of two 3-level JSON eqs on different deepest subfields → merged',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(
+        eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'),
+        '=',
+        1,
+      )
+      .where(
+        eb => eb.ref('metadata', '->').key('nested').key('deep').key('label'),
+        '=',
+        'a',
+      ),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [
+          {
+            metadata: {
+              nested: {
+                deep: {
+                  value: { $in: [1] },
+                  label: { $in: ['a'] },
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
+  },
+  {
+    it: 'AND of 2-level and 3-level JSON eqs on same column → merged across depths',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('timestamps').key('createdAt'), '=', 7)
+      .where(
+        eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'),
+        '=',
+        42,
+      ),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [
+          {
+            metadata: {
+              timestamps: { createdAt: { $in: [7] } },
+              nested: { deep: { value: { $in: [42] } } },
             },
           },
         ],

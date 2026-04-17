@@ -48,7 +48,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
   private dbSchemaPromise:
     | undefined
     | Promise<{
-        [Table in AnyTable<DB>]: (keyof DB[Table])[]
+        [Table in AnyTable<DB>]: { name: string; isJson: boolean }[]
       }>
 
   constructor({ createCallbackFunction, queryUpdateDebounceMs, ...config }: ReactiveKyselyConfig) {
@@ -74,13 +74,16 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
     }
 
     const promise = this.introspection.getTables().then(tables => {
-      const schema = {} as { [Table in AnyTable<DB>]: (keyof DB[Table])[] }
+      const schema = {} as {
+        [Table in AnyTable<DB>]: { name: string; isJson: boolean }[]
+      }
 
-      for (const table of tables) {
-        if (!table.isView) {
-          schema[table.name as AnyTable<DB>] = table.columns.map(
-            col => col.name,
-          ) as (keyof DB[AnyTable<DB>])[]
+      for (const { name, columns, isView } of tables) {
+        if (!isView) {
+          schema[name as AnyTable<DB>] = columns.map(col => ({
+            name: col.name,
+            isJson: col.dataType.toLowerCase().startsWith('json'),
+          }))
         }
       }
 
@@ -105,7 +108,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
         const schema = await this.getDbSchema()
         const columns = schema[table]
 
-        if (!columns) {
+        if (!columns?.length) {
           throw new Error(`Table "${table}" not found in database schema`)
         }
 
@@ -127,7 +130,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
 
         // Build JSON object expression for all columns
         function toJson(prefix: 'NEW' | 'OLD') {
-          return `json_object(${(columns as string[]).map(col => `'${col}', "${prefix}"."${col}"`).join(', ')})`
+          return `json_object(${columns.map(col => `'${col.name}', ${col.isJson ? `json("${prefix}"."${col.name}")` : `"${prefix}"."${col.name}"`}`).join(', ')})`
         }
 
         await this.createCallbackFunction(fnName, callback)
@@ -190,9 +193,9 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
     return this.tableRowUpdatesSources.getOrCreate(table, () => {
       return pipe(
         this.rowUpdatesSubject.source,
-        onStart(() => void this.watchTable(table)),
         filter(rowUpdate => rowUpdate.table === table),
         share,
+        onStart(() => void this.watchTable(table)),
       )
     }) as Source<RowUpdate<DB, T>>
   }
