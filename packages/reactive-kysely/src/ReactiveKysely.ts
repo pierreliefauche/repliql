@@ -1,5 +1,5 @@
 import { type HashValue, phash, stableStringify, SourceMap } from '@repliql/utils'
-import { CompiledQuery, Kysely, KyselyConfig, KyselyProps, sql } from 'kysely'
+import { CompiledQuery, Kysely, KyselyConfig, ParseJSONResultsPlugin, sql } from 'kysely'
 import {
   concat,
   filter,
@@ -27,7 +27,7 @@ type CreateCallbackFunction = (
   callback: (oldJson: string | null, newJson: string | null) => void,
 ) => void | Promise<void>
 
-export type ReactiveKyselyConfig = (KyselyConfig | KyselyProps) & {
+export type ReactiveKyselyConfig = KyselyConfig & {
   createCallbackFunction: CreateCallbackFunction
   queryUpdateDebounceMs?: number
 }
@@ -52,7 +52,18 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
       }>
 
   constructor({ createCallbackFunction, queryUpdateDebounceMs, ...config }: ReactiveKyselyConfig) {
-    super(config)
+    // Ensure the plugin to parse JSON is present
+    const plugins = config.plugins || []
+
+    if (!plugins.some(plugin => plugin instanceof ParseJSONResultsPlugin)) {
+      plugins.push(new ParseJSONResultsPlugin())
+    }
+
+    super({
+      ...config,
+      plugins,
+    })
+
     this.createCallbackFunction = createCallbackFunction
     this.defaultQueryUpdateDebounceMs = queryUpdateDebounceMs ?? DEFAULT_QUERY_UPDATE_DEBOUNCE_MS
   }
