@@ -4,16 +4,19 @@ export const ISSUES_QUERY = gql`
   query Issues($first: Int) {
     issues(first: $first, orderBy: updatedAt) {
       nodes {
+        __typename
         id
         identifier
         title
         priority
         state {
+          __typename
           id
           name
           color
         }
         assignee {
+          __typename
           id
           name
           avatarUrl
@@ -29,6 +32,7 @@ export const PROJECTS_QUERY = gql`
   query Projects($first: Int) {
     projects(first: $first, orderBy: updatedAt) {
       nodes {
+        __typename
         id
         name
         description
@@ -38,11 +42,13 @@ export const PROJECTS_QUERY = gql`
         targetDate
         teams {
           nodes {
+            __typename
             id
             name
           }
         }
         lead {
+          __typename
           id
           name
           avatarUrl
@@ -57,6 +63,7 @@ export const PROJECTS_QUERY = gql`
 export const ISSUE_DETAIL_QUERY = gql`
   query IssueDetail($id: String!) {
     issue(id: $id) {
+      __typename
       id
       identifier
       title
@@ -65,27 +72,32 @@ export const ISSUE_DETAIL_QUERY = gql`
       estimate
       url
       state {
+        __typename
         id
         name
         color
       }
       assignee {
+        __typename
         id
         name
         avatarUrl
       }
       labels {
         nodes {
+          __typename
           id
           name
           color
         }
       }
       project {
+        __typename
         id
         name
       }
       team {
+        __typename
         id
       }
       createdAt
@@ -98,6 +110,7 @@ export const WORKFLOW_STATES_QUERY = gql`
   query WorkflowStates($teamId: ID!) {
     workflowStates(filter: { team: { id: { eq: $teamId } } }) {
       nodes {
+        __typename
         id
         name
         color
@@ -112,6 +125,7 @@ export const UPDATE_ISSUE_STATE_MUTATION = gql`
     issueUpdate(id: $id, input: { stateId: $stateId }) {
       success
       issue {
+        __typename
         id
         state {
           id
@@ -128,6 +142,7 @@ export const UPDATE_ISSUE_PRIORITY_MUTATION = gql`
     issueUpdate(id: $id, input: { priority: $priority }) {
       success
       issue {
+        __typename
         id
         priority
       }
@@ -138,6 +153,7 @@ export const UPDATE_ISSUE_PRIORITY_MUTATION = gql`
 export const VIEWER_QUERY = gql`
   query Viewer {
     viewer {
+      __typename
       id
       name
       email
