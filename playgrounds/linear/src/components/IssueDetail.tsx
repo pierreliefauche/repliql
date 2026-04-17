@@ -10,7 +10,7 @@ import {
   ISSUE_DETAIL_QUERY,
   UPDATE_ISSUE_PRIORITY_MUTATION,
   UPDATE_ISSUE_STATE_MUTATION,
-} from '@/lib/queries'
+} from '@/graphql/queries'
 
 interface IssueDetailProps {
   issueId: string

@@ -3,7 +3,7 @@ import { useQuery } from 'urql'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import { PROJECTS_QUERY } from '@/lib/queries'
+import { PROJECTS_QUERY } from '@/graphql/queries'
 
 export function ProjectsView() {
   const [{ data, fetching, error }] = useQuery({

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
+    "codegen:schema": "bun run scripts/build-schema-subset.ts",
     "dev": "vite",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "lint": "eslint .",

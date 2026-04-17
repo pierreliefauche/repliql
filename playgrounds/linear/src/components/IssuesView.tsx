@@ -5,7 +5,7 @@ import { Link, Route, useLocation } from 'wouter'
 import { IssueDetail } from '@/components/IssueDetail'
 import { PriorityBadge } from '@/components/PriorityBadge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ISSUES_QUERY } from '@/lib/queries'
+import { ISSUES_QUERY } from '@/graphql/queries'
 
 export function IssuesView() {
   const [, navigate] = useLocation()

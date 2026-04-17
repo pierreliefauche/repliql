@@ -1,0 +1,1759 @@
+input ActivityCollectionFilter {
+  and: [ActivityCollectionFilter!]
+  createdAt: DateComparator
+  every: ActivityFilter
+  id: IDComparator
+  length: NumberComparator
+  or: [ActivityCollectionFilter!]
+  some: ActivityFilter
+  updatedAt: DateComparator
+  user: UserFilter
+}
+
+input ActivityFilter {
+  and: [ActivityFilter!]
+  createdAt: DateComparator
+  id: IDComparator
+  or: [ActivityFilter!]
+  updatedAt: DateComparator
+  user: UserFilter
+}
+
+input AssigneeSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input AttachmentCollectionFilter {
+  and: [AttachmentCollectionFilter!]
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  every: AttachmentFilter
+  id: IDComparator
+  length: NumberComparator
+  or: [AttachmentCollectionFilter!]
+  some: AttachmentFilter
+  sourceType: SourceTypeComparator
+  subtitle: NullableStringComparator
+  title: StringComparator
+  updatedAt: DateComparator
+  url: StringComparator
+}
+
+input AttachmentFilter {
+  and: [AttachmentFilter!]
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  id: IDComparator
+  or: [AttachmentFilter!]
+  sourceType: SourceTypeComparator
+  subtitle: NullableStringComparator
+  title: StringComparator
+  updatedAt: DateComparator
+  url: StringComparator
+}
+
+input BooleanComparator {
+  eq: Boolean
+  neq: Boolean
+}
+
+input CommentCollectionFilter {
+  and: [CommentCollectionFilter!]
+  body: StringComparator
+  createdAt: DateComparator
+  documentContent: NullableDocumentContentFilter
+  every: CommentFilter
+  id: IDComparator
+  initiative: NullableInitiativeFilter
+  issue: NullableIssueFilter
+  length: NumberComparator
+  needs: CustomerNeedCollectionFilter
+  or: [CommentCollectionFilter!]
+  parent: NullableCommentFilter
+  project: NullableProjectFilter
+  projectUpdate: NullableProjectUpdateFilter
+  reactions: ReactionCollectionFilter
+  some: CommentFilter
+  updatedAt: DateComparator
+  user: UserFilter
+}
+
+input CommentFilter {
+  and: [CommentFilter!]
+  body: StringComparator
+  createdAt: DateComparator
+  documentContent: NullableDocumentContentFilter
+  id: IDComparator
+  initiative: NullableInitiativeFilter
+  issue: NullableIssueFilter
+  needs: CustomerNeedCollectionFilter
+  or: [CommentFilter!]
+  parent: NullableCommentFilter
+  project: NullableProjectFilter
+  projectUpdate: NullableProjectUpdateFilter
+  reactions: ReactionCollectionFilter
+  updatedAt: DateComparator
+  user: UserFilter
+}
+
+input CompletedAtSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ContentComparator {
+  contains: String
+  notContains: String
+}
+
+input CreatedAtSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input CustomerCountSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input CustomerImportantCountSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input CustomerNeedCollectionFilter {
+  and: [CustomerNeedCollectionFilter!]
+  comment: NullableCommentFilter
+  createdAt: DateComparator
+  customer: NullableCustomerFilter
+  every: CustomerNeedFilter
+  id: IDComparator
+  issue: NullableIssueFilter
+  length: NumberComparator
+  or: [CustomerNeedCollectionFilter!]
+  priority: NumberComparator
+  project: NullableProjectFilter
+  some: CustomerNeedFilter
+  updatedAt: DateComparator
+}
+
+input CustomerNeedFilter {
+  and: [CustomerNeedFilter!]
+  comment: NullableCommentFilter
+  createdAt: DateComparator
+  customer: NullableCustomerFilter
+  id: IDComparator
+  issue: NullableIssueFilter
+  or: [CustomerNeedFilter!]
+  priority: NumberComparator
+  project: NullableProjectFilter
+  updatedAt: DateComparator
+}
+
+input CustomerRevenueSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input CustomerSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input CustomerStatusFilter {
+  and: [CustomerStatusFilter!]
+  color: StringComparator
+  createdAt: DateComparator
+  description: StringComparator
+  id: IDComparator
+  name: StringComparator
+  or: [CustomerStatusFilter!]
+  position: NumberComparator
+  type: StringComparator
+  updatedAt: DateComparator
+}
+
+input CustomerTierFilter {
+  and: [CustomerTierFilter!]
+  color: StringComparator
+  createdAt: DateComparator
+  description: StringComparator
+  displayName: StringComparator
+  id: IDComparator
+  or: [CustomerTierFilter!]
+  position: NumberComparator
+  updatedAt: DateComparator
+}
+
+input CycleFilter {
+  and: [CycleFilter!]
+  completedAt: DateComparator
+  createdAt: DateComparator
+  endsAt: DateComparator
+  id: IDComparator
+  inheritedFromId: IDComparator
+  isActive: BooleanComparator
+  isFuture: BooleanComparator
+  isInCooldown: BooleanComparator
+  isNext: BooleanComparator
+  isPast: BooleanComparator
+  isPrevious: BooleanComparator
+  issues: IssueCollectionFilter
+  name: StringComparator
+  number: NumberComparator
+  or: [CycleFilter!]
+  startsAt: DateComparator
+  team: TeamFilter
+  updatedAt: DateComparator
+}
+
+enum CyclePeriod {
+  after
+  before
+  during
+}
+
+input CyclePeriodComparator {
+  eq: CyclePeriod
+  in: [CyclePeriod!]
+  neq: CyclePeriod
+  nin: [CyclePeriod!]
+  null: Boolean
+}
+
+input CycleSort {
+  currentCycleFirst: Boolean = false
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input DateComparator {
+  eq: DateTimeOrDuration
+  gt: DateTimeOrDuration
+  gte: DateTimeOrDuration
+  in: [DateTimeOrDuration!]
+  lt: DateTimeOrDuration
+  lte: DateTimeOrDuration
+  neq: DateTimeOrDuration
+  nin: [DateTimeOrDuration!]
+}
+
+scalar DateTime
+
+scalar DateTimeOrDuration
+
+input DelegateSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input DocumentFilter {
+  and: [DocumentFilter!]
+  createdAt: DateComparator
+  creator: UserFilter
+  cycle: CycleFilter
+  id: IDComparator
+  initiative: InitiativeFilter
+  issue: IssueFilter
+  or: [DocumentFilter!]
+  project: ProjectFilter
+  release: ReleaseFilter
+  slugId: StringComparator
+  title: StringComparator
+  updatedAt: DateComparator
+}
+
+input DueDateSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+scalar Duration
+
+input EstimateComparator {
+  and: [NullableNumberComparator!]
+  eq: Float
+  gt: Float
+  gte: Float
+  in: [Float!]
+  lt: Float
+  lte: Float
+  neq: Float
+  nin: [Float!]
+  null: Boolean
+  or: [NullableNumberComparator!]
+}
+
+input EstimateSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input IDComparator {
+  eq: ID
+  in: [ID!]
+  neq: ID
+  nin: [ID!]
+}
+
+input InitiativeCollectionFilter {
+  activityType: StringComparator
+  ancestors: InitiativeCollectionFilter
+  and: [InitiativeCollectionFilter!]
+  completedAt: NullableDateComparator
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  every: InitiativeFilter
+  health: StringComparator
+  healthWithAge: StringComparator
+  id: IDComparator
+  initiativeUpdates: InitiativeUpdatesCollectionFilter
+  length: NumberComparator
+  name: StringComparator
+  or: [InitiativeCollectionFilter!]
+  owner: NullableUserFilter
+  slugId: StringComparator
+  some: InitiativeFilter
+  startedAt: NullableDateComparator
+  status: StringComparator
+  targetDate: NullableDateComparator
+  teams: TeamCollectionFilter
+  updatedAt: DateComparator
+}
+
+input InitiativeFilter {
+  activityType: StringComparator
+  ancestors: InitiativeCollectionFilter
+  and: [InitiativeFilter!]
+  completedAt: NullableDateComparator
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  health: StringComparator
+  healthWithAge: StringComparator
+  id: IDComparator
+  initiativeUpdates: InitiativeUpdatesCollectionFilter
+  name: StringComparator
+  or: [InitiativeFilter!]
+  owner: NullableUserFilter
+  slugId: StringComparator
+  startedAt: NullableDateComparator
+  status: StringComparator
+  targetDate: NullableDateComparator
+  teams: TeamCollectionFilter
+  updatedAt: DateComparator
+}
+
+input InitiativeUpdatesCollectionFilter {
+  and: [InitiativeUpdatesCollectionFilter!]
+  createdAt: DateComparator
+  every: InitiativeUpdatesFilter
+  id: IDComparator
+  length: NumberComparator
+  or: [InitiativeUpdatesCollectionFilter!]
+  some: InitiativeUpdatesFilter
+  updatedAt: DateComparator
+}
+
+input InitiativeUpdatesFilter {
+  and: [InitiativeUpdatesFilter!]
+  createdAt: DateComparator
+  id: IDComparator
+  or: [InitiativeUpdatesFilter!]
+  updatedAt: DateComparator
+}
+
+type Issue {
+  assignee: User
+  createdAt: DateTime!
+  description: String
+  estimate: Float
+  id: ID!
+  identifier: String!
+  labels(after: String, before: String, filter: IssueLabelFilter, first: Int, includeArchived: Boolean, last: Int, orderBy: PaginationOrderBy): IssueLabelConnection!
+  priority: Float!
+  project: Project
+  state: WorkflowState!
+  team: Team!
+  title: String!
+  updatedAt: DateTime!
+  url: String!
+}
+
+input IssueCollectionFilter {
+  accumulatedStateUpdatedAt: NullableDateComparator
+  activity: ActivityCollectionFilter
+  addedToCycleAt: NullableDateComparator
+  addedToCyclePeriod: CyclePeriodComparator
+  ageTime: NullableDurationComparator
+  and: [IssueCollectionFilter!]
+  archivedAt: NullableDateComparator
+  assignee: NullableUserFilter
+  attachments: AttachmentCollectionFilter
+  autoArchivedAt: NullableDateComparator
+  autoClosedAt: NullableDateComparator
+  canceledAt: NullableDateComparator
+  children: IssueCollectionFilter
+  comments: CommentCollectionFilter
+  completedAt: NullableDateComparator
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  customerCount: NumberComparator
+  customerImportantCount: NumberComparator
+  cycle: NullableCycleFilter
+  cycleTime: NullableDurationComparator
+  delegate: NullableUserFilter
+  description: NullableStringComparator
+  dueDate: NullableTimelessDateComparator
+  estimate: EstimateComparator
+  every: IssueFilter
+  hasBlockedByRelations: RelationExistsComparator
+  hasBlockingRelations: RelationExistsComparator
+  hasDuplicateRelations: RelationExistsComparator
+  hasRelatedRelations: RelationExistsComparator
+  hasSharedUsers: RelationExistsComparator
+  hasSuggestedAssignees: RelationExistsComparator
+  hasSuggestedLabels: RelationExistsComparator
+  hasSuggestedProjects: RelationExistsComparator
+  hasSuggestedRelatedIssues: RelationExistsComparator
+  hasSuggestedSimilarIssues: RelationExistsComparator
+  hasSuggestedTeams: RelationExistsComparator
+  id: IssueIDComparator
+  labels: IssueLabelCollectionFilter
+  lastAppliedTemplate: NullableTemplateFilter
+  leadTime: NullableDurationComparator
+  length: NumberComparator
+  needs: CustomerNeedCollectionFilter
+  number: NumberComparator
+  or: [IssueCollectionFilter!]
+  parent: NullableIssueFilter
+  priority: NullableNumberComparator
+  project: NullableProjectFilter
+  projectMilestone: NullableProjectMilestoneFilter
+  reactions: ReactionCollectionFilter
+  recurringIssueTemplate: NullableTemplateFilter
+  releases: ReleaseCollectionFilter
+  searchableContent: ContentComparator
+  sharedWith: UserCollectionFilter
+  slaBreachesAt: NullableDateComparator
+  slaStatus: SlaStatusComparator
+  snoozedBy: NullableUserFilter
+  snoozedUntilAt: NullableDateComparator
+  some: IssueFilter
+  sourceMetadata: SourceMetadataComparator
+  startedAt: NullableDateComparator
+  state: WorkflowStateFilter
+  subscribers: UserCollectionFilter
+  suggestions: IssueSuggestionCollectionFilter
+  team: TeamFilter
+  title: StringComparator
+  triageTime: NullableDurationComparator
+  triagedAt: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+type IssueConnection {
+  nodes: [Issue!]!
+}
+
+input IssueFilter {
+  accumulatedStateUpdatedAt: NullableDateComparator
+  activity: ActivityCollectionFilter
+  addedToCycleAt: NullableDateComparator
+  addedToCyclePeriod: CyclePeriodComparator
+  ageTime: NullableDurationComparator
+  and: [IssueFilter!]
+  archivedAt: NullableDateComparator
+  assignee: NullableUserFilter
+  attachments: AttachmentCollectionFilter
+  autoArchivedAt: NullableDateComparator
+  autoClosedAt: NullableDateComparator
+  canceledAt: NullableDateComparator
+  children: IssueCollectionFilter
+  comments: CommentCollectionFilter
+  completedAt: NullableDateComparator
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  customerCount: NumberComparator
+  customerImportantCount: NumberComparator
+  cycle: NullableCycleFilter
+  cycleTime: NullableDurationComparator
+  delegate: NullableUserFilter
+  description: NullableStringComparator
+  dueDate: NullableTimelessDateComparator
+  estimate: EstimateComparator
+  hasBlockedByRelations: RelationExistsComparator
+  hasBlockingRelations: RelationExistsComparator
+  hasDuplicateRelations: RelationExistsComparator
+  hasRelatedRelations: RelationExistsComparator
+  hasSharedUsers: RelationExistsComparator
+  hasSuggestedAssignees: RelationExistsComparator
+  hasSuggestedLabels: RelationExistsComparator
+  hasSuggestedProjects: RelationExistsComparator
+  hasSuggestedRelatedIssues: RelationExistsComparator
+  hasSuggestedSimilarIssues: RelationExistsComparator
+  hasSuggestedTeams: RelationExistsComparator
+  id: IssueIDComparator
+  labels: IssueLabelCollectionFilter
+  lastAppliedTemplate: NullableTemplateFilter
+  leadTime: NullableDurationComparator
+  needs: CustomerNeedCollectionFilter
+  number: NumberComparator
+  or: [IssueFilter!]
+  parent: NullableIssueFilter
+  priority: NullableNumberComparator
+  project: NullableProjectFilter
+  projectMilestone: NullableProjectMilestoneFilter
+  reactions: ReactionCollectionFilter
+  recurringIssueTemplate: NullableTemplateFilter
+  releases: ReleaseCollectionFilter
+  searchableContent: ContentComparator
+  sharedWith: UserCollectionFilter
+  slaBreachesAt: NullableDateComparator
+  slaStatus: SlaStatusComparator
+  snoozedBy: NullableUserFilter
+  snoozedUntilAt: NullableDateComparator
+  sourceMetadata: SourceMetadataComparator
+  startedAt: NullableDateComparator
+  state: WorkflowStateFilter
+  subscribers: UserCollectionFilter
+  suggestions: IssueSuggestionCollectionFilter
+  team: TeamFilter
+  title: StringComparator
+  triageTime: NullableDurationComparator
+  triagedAt: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+input IssueIDComparator {
+  eq: ID
+  in: [ID!]
+  neq: ID
+  nin: [ID!]
+}
+
+type IssueLabel {
+  color: String!
+  id: ID!
+  name: String!
+}
+
+input IssueLabelCollectionFilter {
+  and: [IssueLabelCollectionFilter!]
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  every: IssueLabelFilter
+  id: IDComparator
+  isGroup: BooleanComparator
+  length: NumberComparator
+  name: StringComparator
+  null: Boolean
+  or: [IssueLabelCollectionFilter!]
+  parent: IssueLabelFilter
+  some: IssueLabelFilter
+  team: NullableTeamFilter
+  updatedAt: DateComparator
+}
+
+type IssueLabelConnection {
+  nodes: [IssueLabel!]!
+}
+
+input IssueLabelFilter {
+  and: [IssueLabelFilter!]
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  id: IDComparator
+  isGroup: BooleanComparator
+  name: StringComparator
+  or: [IssueLabelFilter!]
+  parent: IssueLabelFilter
+  team: NullableTeamFilter
+  updatedAt: DateComparator
+}
+
+type IssuePayload {
+  issue: Issue
+  success: Boolean!
+}
+
+input IssueSortInput {
+  accumulatedStateUpdatedAt: TimeInStatusSort
+  assignee: AssigneeSort
+  completedAt: CompletedAtSort
+  createdAt: CreatedAtSort
+  customer: CustomerSort
+  customerCount: CustomerCountSort
+  customerImportantCount: CustomerImportantCountSort
+  customerRevenue: CustomerRevenueSort
+  cycle: CycleSort
+  delegate: DelegateSort
+  dueDate: DueDateSort
+  estimate: EstimateSort
+  label: LabelSort
+  labelGroup: LabelGroupSort
+  linkCount: LinkCountSort
+  manual: ManualSort
+  milestone: MilestoneSort
+  priority: PrioritySort
+  project: ProjectSort
+  release: ReleaseSort
+  rootIssue: RootIssueSort
+  slaStatus: SlaStatusSort
+  team: TeamSort
+  title: TitleSort
+  updatedAt: UpdatedAtSort
+  workflowState: WorkflowStateSort
+}
+
+input IssueSuggestionCollectionFilter {
+  and: [IssueSuggestionCollectionFilter!]
+  createdAt: DateComparator
+  every: IssueSuggestionFilter
+  id: IDComparator
+  length: NumberComparator
+  or: [IssueSuggestionCollectionFilter!]
+  some: IssueSuggestionFilter
+  state: StringComparator
+  suggestedLabel: IssueLabelFilter
+  suggestedProject: NullableProjectFilter
+  suggestedTeam: NullableTeamFilter
+  suggestedUser: NullableUserFilter
+  type: StringComparator
+  updatedAt: DateComparator
+}
+
+input IssueSuggestionFilter {
+  and: [IssueSuggestionFilter!]
+  createdAt: DateComparator
+  id: IDComparator
+  or: [IssueSuggestionFilter!]
+  state: StringComparator
+  suggestedLabel: IssueLabelFilter
+  suggestedProject: NullableProjectFilter
+  suggestedTeam: NullableTeamFilter
+  suggestedUser: NullableUserFilter
+  type: StringComparator
+  updatedAt: DateComparator
+}
+
+input IssueUpdateInput {
+  addedLabelIds: [String!]
+  addedReleaseIds: [String!]
+  assigneeId: String
+  autoClosedByParentClosing: Boolean
+  cycleId: String
+  delegateId: String
+  description: String
+  descriptionData: JSON
+  dueDate: TimelessDate
+  estimate: Int
+  inheritsSharedAccess: Boolean
+  labelIds: [String!]
+  lastAppliedTemplateId: String
+  parentId: String
+  priority: Int
+  prioritySortOrder: Float
+  projectId: String
+  projectMilestoneId: String
+  releaseIds: [String!]
+  removedLabelIds: [String!]
+  removedReleaseIds: [String!]
+  slaBreachesAt: DateTime
+  slaStartedAt: DateTime
+  slaType: SLADayCountType
+  snoozedById: String
+  snoozedUntilAt: DateTime
+  sortOrder: Float
+  stateId: String
+  subIssueSortOrder: Float
+  subscriberIds: [String!]
+  teamId: String
+  title: String
+  trashed: Boolean
+}
+
+scalar JSON
+
+scalar JSONObject
+
+input LabelGroupSort {
+  labelGroupId: String!
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input LabelSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input LinkCountSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ManualSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input MilestoneSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+type Mutation {
+  issueUpdate(id: String!, input: IssueUpdateInput!): IssuePayload!
+}
+
+input NullableCommentFilter {
+  and: [NullableCommentFilter!]
+  body: StringComparator
+  createdAt: DateComparator
+  documentContent: NullableDocumentContentFilter
+  id: IDComparator
+  initiative: NullableInitiativeFilter
+  issue: NullableIssueFilter
+  needs: CustomerNeedCollectionFilter
+  null: Boolean
+  or: [NullableCommentFilter!]
+  parent: NullableCommentFilter
+  project: NullableProjectFilter
+  projectUpdate: NullableProjectUpdateFilter
+  reactions: ReactionCollectionFilter
+  updatedAt: DateComparator
+  user: UserFilter
+}
+
+input NullableCustomerFilter {
+  and: [NullableCustomerFilter!]
+  createdAt: DateComparator
+  domains: StringArrayComparator
+  externalIds: StringArrayComparator
+  id: IDComparator
+  name: StringComparator
+  needs: CustomerNeedCollectionFilter
+  null: Boolean
+  or: [NullableCustomerFilter!]
+  owner: NullableUserFilter
+  revenue: NumberComparator
+  size: NumberComparator
+  slackChannelId: StringComparator
+  status: CustomerStatusFilter
+  tier: CustomerTierFilter
+  updatedAt: DateComparator
+}
+
+input NullableCycleFilter {
+  and: [NullableCycleFilter!]
+  completedAt: DateComparator
+  createdAt: DateComparator
+  endsAt: DateComparator
+  id: IDComparator
+  inheritedFromId: IDComparator
+  isActive: BooleanComparator
+  isFuture: BooleanComparator
+  isInCooldown: BooleanComparator
+  isNext: BooleanComparator
+  isPast: BooleanComparator
+  isPrevious: BooleanComparator
+  issues: IssueCollectionFilter
+  name: StringComparator
+  null: Boolean
+  number: NumberComparator
+  or: [NullableCycleFilter!]
+  startsAt: DateComparator
+  team: TeamFilter
+  updatedAt: DateComparator
+}
+
+input NullableDateComparator {
+  eq: DateTimeOrDuration
+  gt: DateTimeOrDuration
+  gte: DateTimeOrDuration
+  in: [DateTimeOrDuration!]
+  lt: DateTimeOrDuration
+  lte: DateTimeOrDuration
+  neq: DateTimeOrDuration
+  nin: [DateTimeOrDuration!]
+  null: Boolean
+}
+
+input NullableDocumentContentFilter {
+  and: [NullableDocumentContentFilter!]
+  content: NullableStringComparator
+  createdAt: DateComparator
+  document: DocumentFilter
+  id: IDComparator
+  null: Boolean
+  or: [NullableDocumentContentFilter!]
+  project: ProjectFilter
+  updatedAt: DateComparator
+}
+
+input NullableDurationComparator {
+  eq: Duration
+  gt: Duration
+  gte: Duration
+  in: [Duration!]
+  lt: Duration
+  lte: Duration
+  neq: Duration
+  nin: [Duration!]
+  null: Boolean
+}
+
+input NullableInitiativeFilter {
+  activityType: StringComparator
+  ancestors: InitiativeCollectionFilter
+  and: [NullableInitiativeFilter!]
+  completedAt: NullableDateComparator
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  health: StringComparator
+  healthWithAge: StringComparator
+  id: IDComparator
+  initiativeUpdates: InitiativeUpdatesCollectionFilter
+  name: StringComparator
+  null: Boolean
+  or: [NullableInitiativeFilter!]
+  owner: NullableUserFilter
+  slugId: StringComparator
+  startedAt: NullableDateComparator
+  status: StringComparator
+  targetDate: NullableDateComparator
+  teams: TeamCollectionFilter
+  updatedAt: DateComparator
+}
+
+input NullableIssueFilter {
+  accumulatedStateUpdatedAt: NullableDateComparator
+  activity: ActivityCollectionFilter
+  addedToCycleAt: NullableDateComparator
+  addedToCyclePeriod: CyclePeriodComparator
+  ageTime: NullableDurationComparator
+  and: [NullableIssueFilter!]
+  archivedAt: NullableDateComparator
+  assignee: NullableUserFilter
+  attachments: AttachmentCollectionFilter
+  autoArchivedAt: NullableDateComparator
+  autoClosedAt: NullableDateComparator
+  canceledAt: NullableDateComparator
+  children: IssueCollectionFilter
+  comments: CommentCollectionFilter
+  completedAt: NullableDateComparator
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  customerCount: NumberComparator
+  customerImportantCount: NumberComparator
+  cycle: NullableCycleFilter
+  cycleTime: NullableDurationComparator
+  delegate: NullableUserFilter
+  description: NullableStringComparator
+  dueDate: NullableTimelessDateComparator
+  estimate: EstimateComparator
+  hasBlockedByRelations: RelationExistsComparator
+  hasBlockingRelations: RelationExistsComparator
+  hasDuplicateRelations: RelationExistsComparator
+  hasRelatedRelations: RelationExistsComparator
+  hasSharedUsers: RelationExistsComparator
+  hasSuggestedAssignees: RelationExistsComparator
+  hasSuggestedLabels: RelationExistsComparator
+  hasSuggestedProjects: RelationExistsComparator
+  hasSuggestedRelatedIssues: RelationExistsComparator
+  hasSuggestedSimilarIssues: RelationExistsComparator
+  hasSuggestedTeams: RelationExistsComparator
+  id: IssueIDComparator
+  labels: IssueLabelCollectionFilter
+  lastAppliedTemplate: NullableTemplateFilter
+  leadTime: NullableDurationComparator
+  needs: CustomerNeedCollectionFilter
+  null: Boolean
+  number: NumberComparator
+  or: [NullableIssueFilter!]
+  parent: NullableIssueFilter
+  priority: NullableNumberComparator
+  project: NullableProjectFilter
+  projectMilestone: NullableProjectMilestoneFilter
+  reactions: ReactionCollectionFilter
+  recurringIssueTemplate: NullableTemplateFilter
+  releases: ReleaseCollectionFilter
+  searchableContent: ContentComparator
+  sharedWith: UserCollectionFilter
+  slaBreachesAt: NullableDateComparator
+  slaStatus: SlaStatusComparator
+  snoozedBy: NullableUserFilter
+  snoozedUntilAt: NullableDateComparator
+  sourceMetadata: SourceMetadataComparator
+  startedAt: NullableDateComparator
+  state: WorkflowStateFilter
+  subscribers: UserCollectionFilter
+  suggestions: IssueSuggestionCollectionFilter
+  team: TeamFilter
+  title: StringComparator
+  triageTime: NullableDurationComparator
+  triagedAt: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+input NullableNumberComparator {
+  eq: Float
+  gt: Float
+  gte: Float
+  in: [Float!]
+  lt: Float
+  lte: Float
+  neq: Float
+  nin: [Float!]
+  null: Boolean
+}
+
+input NullableProjectFilter {
+  accessibleTeams: TeamCollectionFilter
+  activityType: StringComparator
+  and: [NullableProjectFilter!]
+  canceledAt: NullableDateComparator
+  completedAt: NullableDateComparator
+  completedProjectMilestones: ProjectMilestoneCollectionFilter
+  createdAt: DateComparator
+  creator: UserFilter
+  customerCount: NumberComparator
+  customerImportantCount: NumberComparator
+  hasBlockedByRelations: RelationExistsComparator
+  hasBlockingRelations: RelationExistsComparator
+  hasDependedOnByRelations: RelationExistsComparator
+  hasDependsOnRelations: RelationExistsComparator
+  hasRelatedRelations: RelationExistsComparator
+  hasViolatedRelations: RelationExistsComparator
+  health: StringComparator
+  healthWithAge: StringComparator
+  id: IDComparator
+  initiatives: InitiativeCollectionFilter
+  issues: IssueCollectionFilter
+  labels: ProjectLabelCollectionFilter
+  lastAppliedTemplate: NullableTemplateFilter
+  lead: NullableUserFilter
+  members: UserCollectionFilter
+  name: StringComparator
+  needs: CustomerNeedCollectionFilter
+  nextProjectMilestone: ProjectMilestoneFilter
+  null: Boolean
+  or: [NullableProjectFilter!]
+  priority: NullableNumberComparator
+  projectMilestones: ProjectMilestoneCollectionFilter
+  projectUpdates: ProjectUpdatesCollectionFilter
+  roadmaps: RoadmapCollectionFilter
+  searchableContent: ContentComparator
+  slugId: StringComparator
+  startDate: NullableDateComparator
+  startedAt: NullableDateComparator
+  state: StringComparator
+  status: ProjectStatusFilter
+  targetDate: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+input NullableProjectMilestoneFilter {
+  and: [NullableProjectMilestoneFilter!]
+  createdAt: DateComparator
+  id: IDComparator
+  name: NullableStringComparator
+  null: Boolean
+  or: [NullableProjectMilestoneFilter!]
+  project: NullableProjectFilter
+  targetDate: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+input NullableProjectUpdateFilter {
+  and: [NullableProjectUpdateFilter!]
+  createdAt: DateComparator
+  id: IDComparator
+  null: Boolean
+  or: [NullableProjectUpdateFilter!]
+  project: ProjectFilter
+  reactions: ReactionCollectionFilter
+  updatedAt: DateComparator
+  user: UserFilter
+}
+
+input NullableStringComparator {
+  contains: String
+  containsIgnoreCase: String
+  containsIgnoreCaseAndAccent: String
+  endsWith: String
+  eq: String
+  eqIgnoreCase: String
+  in: [String!]
+  neq: String
+  neqIgnoreCase: String
+  nin: [String!]
+  notContains: String
+  notContainsIgnoreCase: String
+  notEndsWith: String
+  notStartsWith: String
+  null: Boolean
+  startsWith: String
+  startsWithIgnoreCase: String
+}
+
+input NullableTeamFilter {
+  ancestors: TeamCollectionFilter
+  and: [NullableTeamFilter!]
+  createdAt: DateComparator
+  description: NullableStringComparator
+  id: IDComparator
+  issues: IssueCollectionFilter
+  key: StringComparator
+  name: StringComparator
+  null: Boolean
+  or: [NullableTeamFilter!]
+  parent: NullableTeamFilter
+  private: BooleanComparator
+  releasePipelines: ReleasePipelineCollectionFilter
+  retiredAt: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+input NullableTemplateFilter {
+  and: [NullableTemplateFilter!]
+  createdAt: DateComparator
+  id: IDComparator
+  inheritedFromId: IDComparator
+  name: StringComparator
+  null: Boolean
+  or: [NullableTemplateFilter!]
+  type: StringComparator
+  updatedAt: DateComparator
+}
+
+input NullableTimelessDateComparator {
+  eq: TimelessDateOrDuration
+  gt: TimelessDateOrDuration
+  gte: TimelessDateOrDuration
+  in: [TimelessDateOrDuration!]
+  lt: TimelessDateOrDuration
+  lte: TimelessDateOrDuration
+  neq: TimelessDateOrDuration
+  nin: [TimelessDateOrDuration!]
+  null: Boolean
+}
+
+input NullableUserFilter {
+  active: BooleanComparator
+  admin: BooleanComparator
+  and: [NullableUserFilter!]
+  app: BooleanComparator
+  assignedIssues: IssueCollectionFilter
+  createdAt: DateComparator
+  displayName: StringComparator
+  email: StringComparator
+  id: IDComparator
+  invited: BooleanComparator
+  isInvited: BooleanComparator
+  isMe: BooleanComparator
+  name: StringComparator
+  null: Boolean
+  or: [NullableUserFilter!]
+  owner: BooleanComparator
+  updatedAt: DateComparator
+}
+
+input NumberComparator {
+  eq: Float
+  gt: Float
+  gte: Float
+  in: [Float!]
+  lt: Float
+  lte: Float
+  neq: Float
+  nin: [Float!]
+}
+
+enum PaginationNulls {
+  first
+  last
+}
+
+enum PaginationOrderBy {
+  createdAt
+  updatedAt
+}
+
+enum PaginationSortOrder {
+  Ascending
+  Descending
+}
+
+input PrioritySort {
+  noPriorityFirst: Boolean = false
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+type Project {
+  createdAt: DateTime!
+  description: String!
+  id: ID!
+  lead: User
+  name: String!
+  progress: Float!
+  startDate: TimelessDate
+  state: String! @deprecated(reason: "Use project.status instead")
+  targetDate: TimelessDate
+  teams(after: String, before: String, filter: TeamFilter, first: Int, includeArchived: Boolean, last: Int, orderBy: PaginationOrderBy): TeamConnection!
+  updatedAt: DateTime!
+}
+
+input ProjectCollectionFilter {
+  accessibleTeams: TeamCollectionFilter
+  activityType: StringComparator
+  and: [ProjectCollectionFilter!]
+  canceledAt: NullableDateComparator
+  completedAt: NullableDateComparator
+  completedProjectMilestones: ProjectMilestoneCollectionFilter
+  createdAt: DateComparator
+  creator: UserFilter
+  customerCount: NumberComparator
+  customerImportantCount: NumberComparator
+  every: ProjectFilter
+  hasBlockedByRelations: RelationExistsComparator
+  hasBlockingRelations: RelationExistsComparator
+  hasDependedOnByRelations: RelationExistsComparator
+  hasDependsOnRelations: RelationExistsComparator
+  hasRelatedRelations: RelationExistsComparator
+  hasViolatedRelations: RelationExistsComparator
+  health: StringComparator
+  healthWithAge: StringComparator
+  id: IDComparator
+  initiatives: InitiativeCollectionFilter
+  issues: IssueCollectionFilter
+  labels: ProjectLabelCollectionFilter
+  lastAppliedTemplate: NullableTemplateFilter
+  lead: NullableUserFilter
+  length: NumberComparator
+  members: UserCollectionFilter
+  name: StringComparator
+  needs: CustomerNeedCollectionFilter
+  nextProjectMilestone: ProjectMilestoneFilter
+  or: [ProjectCollectionFilter!]
+  priority: NullableNumberComparator
+  projectMilestones: ProjectMilestoneCollectionFilter
+  projectUpdates: ProjectUpdatesCollectionFilter
+  roadmaps: RoadmapCollectionFilter
+  searchableContent: ContentComparator
+  slugId: StringComparator
+  some: ProjectFilter
+  startDate: NullableDateComparator
+  startedAt: NullableDateComparator
+  state: StringComparator
+  status: ProjectStatusFilter
+  targetDate: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+type ProjectConnection {
+  nodes: [Project!]!
+}
+
+input ProjectCreatedAtSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ProjectFilter {
+  accessibleTeams: TeamCollectionFilter
+  activityType: StringComparator
+  and: [ProjectFilter!]
+  canceledAt: NullableDateComparator
+  completedAt: NullableDateComparator
+  completedProjectMilestones: ProjectMilestoneCollectionFilter
+  createdAt: DateComparator
+  creator: UserFilter
+  customerCount: NumberComparator
+  customerImportantCount: NumberComparator
+  hasBlockedByRelations: RelationExistsComparator
+  hasBlockingRelations: RelationExistsComparator
+  hasDependedOnByRelations: RelationExistsComparator
+  hasDependsOnRelations: RelationExistsComparator
+  hasRelatedRelations: RelationExistsComparator
+  hasViolatedRelations: RelationExistsComparator
+  health: StringComparator
+  healthWithAge: StringComparator
+  id: IDComparator
+  initiatives: InitiativeCollectionFilter
+  issues: IssueCollectionFilter
+  labels: ProjectLabelCollectionFilter
+  lastAppliedTemplate: NullableTemplateFilter
+  lead: NullableUserFilter
+  members: UserCollectionFilter
+  name: StringComparator
+  needs: CustomerNeedCollectionFilter
+  nextProjectMilestone: ProjectMilestoneFilter
+  or: [ProjectFilter!]
+  priority: NullableNumberComparator
+  projectMilestones: ProjectMilestoneCollectionFilter
+  projectUpdates: ProjectUpdatesCollectionFilter
+  roadmaps: RoadmapCollectionFilter
+  searchableContent: ContentComparator
+  slugId: StringComparator
+  startDate: NullableDateComparator
+  startedAt: NullableDateComparator
+  state: StringComparator
+  status: ProjectStatusFilter
+  targetDate: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+input ProjectHealthSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ProjectLabelCollectionFilter {
+  and: [ProjectLabelCollectionFilter!]
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  every: ProjectLabelFilter
+  id: IDComparator
+  isGroup: BooleanComparator
+  length: NumberComparator
+  name: StringComparator
+  null: Boolean
+  or: [ProjectLabelCollectionFilter!]
+  parent: ProjectLabelFilter
+  some: ProjectLabelCollectionFilter
+  updatedAt: DateComparator
+}
+
+input ProjectLabelFilter {
+  and: [ProjectLabelFilter!]
+  createdAt: DateComparator
+  creator: NullableUserFilter
+  id: IDComparator
+  isGroup: BooleanComparator
+  name: StringComparator
+  or: [ProjectLabelFilter!]
+  parent: ProjectLabelFilter
+  updatedAt: DateComparator
+}
+
+input ProjectLeadSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ProjectManualSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ProjectMilestoneCollectionFilter {
+  and: [ProjectMilestoneCollectionFilter!]
+  createdAt: DateComparator
+  every: ProjectMilestoneFilter
+  id: IDComparator
+  length: NumberComparator
+  name: NullableStringComparator
+  or: [ProjectMilestoneCollectionFilter!]
+  project: NullableProjectFilter
+  some: ProjectMilestoneFilter
+  targetDate: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+input ProjectMilestoneFilter {
+  and: [ProjectMilestoneFilter!]
+  createdAt: DateComparator
+  id: IDComparator
+  name: NullableStringComparator
+  or: [ProjectMilestoneFilter!]
+  project: NullableProjectFilter
+  targetDate: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+input ProjectNameSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ProjectPrioritySort {
+  noPriorityFirst: Boolean = false
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ProjectSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ProjectSortInput {
+  createdAt: ProjectCreatedAtSort
+  health: ProjectHealthSort
+  lead: ProjectLeadSort
+  manual: ProjectManualSort
+  name: ProjectNameSort
+  priority: ProjectPrioritySort
+  startDate: StartDateSort
+  status: ProjectStatusSort
+  targetDate: TargetDateSort
+  updatedAt: ProjectUpdatedAtSort
+}
+
+input ProjectStatusFilter {
+  and: [ProjectStatusFilter!]
+  createdAt: DateComparator
+  description: StringComparator
+  id: IDComparator
+  name: StringComparator
+  or: [ProjectStatusFilter!]
+  position: NumberComparator
+  projects: ProjectCollectionFilter
+  type: StringComparator
+  updatedAt: DateComparator
+}
+
+input ProjectStatusSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ProjectUpdatedAtSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ProjectUpdatesCollectionFilter {
+  and: [ProjectUpdatesCollectionFilter!]
+  createdAt: DateComparator
+  every: ProjectUpdatesFilter
+  health: StringComparator
+  id: IDComparator
+  length: NumberComparator
+  or: [ProjectUpdatesCollectionFilter!]
+  some: ProjectUpdatesFilter
+  updatedAt: DateComparator
+}
+
+input ProjectUpdatesFilter {
+  and: [ProjectUpdatesFilter!]
+  createdAt: DateComparator
+  health: StringComparator
+  id: IDComparator
+  or: [ProjectUpdatesFilter!]
+  updatedAt: DateComparator
+}
+
+type Query {
+  issue(id: String!): Issue!
+  issues(after: String, before: String, filter: IssueFilter, first: Int, includeArchived: Boolean, last: Int, orderBy: PaginationOrderBy, sort: [IssueSortInput!]): IssueConnection!
+  projects(after: String, before: String, filter: ProjectFilter, first: Int, includeArchived: Boolean, last: Int, orderBy: PaginationOrderBy, sort: [ProjectSortInput!]): ProjectConnection!
+  viewer: User!
+  workflowStates(after: String, before: String, filter: WorkflowStateFilter, first: Int, includeArchived: Boolean, last: Int, orderBy: PaginationOrderBy): WorkflowStateConnection!
+}
+
+input ReactionCollectionFilter {
+  and: [ReactionCollectionFilter!]
+  createdAt: DateComparator
+  customEmojiId: IDComparator
+  emoji: StringComparator
+  every: ReactionFilter
+  id: IDComparator
+  length: NumberComparator
+  or: [ReactionCollectionFilter!]
+  some: ReactionFilter
+  updatedAt: DateComparator
+}
+
+input ReactionFilter {
+  and: [ReactionFilter!]
+  createdAt: DateComparator
+  customEmojiId: IDComparator
+  emoji: StringComparator
+  id: IDComparator
+  or: [ReactionFilter!]
+  updatedAt: DateComparator
+}
+
+input RelationExistsComparator {
+  eq: Boolean
+  neq: Boolean
+}
+
+input ReleaseCollectionFilter {
+  and: [ReleaseCollectionFilter!]
+  completedAt: NullableDateComparator
+  createdAt: DateComparator
+  every: ReleaseFilter
+  id: IDComparator
+  length: NumberComparator
+  name: StringComparator
+  or: [ReleaseCollectionFilter!]
+  pipeline: ReleasePipelineFilter
+  some: ReleaseFilter
+  stage: ReleaseStageFilter
+  updatedAt: DateComparator
+  version: StringComparator
+}
+
+input ReleaseFilter {
+  and: [ReleaseFilter!]
+  completedAt: NullableDateComparator
+  createdAt: DateComparator
+  id: IDComparator
+  name: StringComparator
+  or: [ReleaseFilter!]
+  pipeline: ReleasePipelineFilter
+  stage: ReleaseStageFilter
+  updatedAt: DateComparator
+  version: StringComparator
+}
+
+input ReleasePipelineCollectionFilter {
+  and: [ReleasePipelineCollectionFilter!]
+  createdAt: DateComparator
+  every: ReleasePipelineFilter
+  id: IDComparator
+  isProduction: BooleanComparator
+  length: NumberComparator
+  name: StringComparator
+  or: [ReleasePipelineCollectionFilter!]
+  some: ReleasePipelineFilter
+  teams: TeamCollectionFilter
+  updatedAt: DateComparator
+}
+
+input ReleasePipelineFilter {
+  and: [ReleasePipelineFilter!]
+  createdAt: DateComparator
+  id: IDComparator
+  isProduction: BooleanComparator
+  name: StringComparator
+  or: [ReleasePipelineFilter!]
+  teams: TeamCollectionFilter
+  updatedAt: DateComparator
+}
+
+input ReleaseSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input ReleaseStageFilter {
+  and: [ReleaseStageFilter!]
+  createdAt: DateComparator
+  id: IDComparator
+  name: StringComparator
+  or: [ReleaseStageFilter!]
+  type: ReleaseStageTypeComparator
+  updatedAt: DateComparator
+}
+
+enum ReleaseStageType {
+  canceled
+  completed
+  planned
+  started
+}
+
+input ReleaseStageTypeComparator {
+  eq: ReleaseStageType
+  in: [ReleaseStageType!]
+  neq: ReleaseStageType
+  nin: [ReleaseStageType!]
+  null: Boolean
+}
+
+input RoadmapCollectionFilter {
+  and: [RoadmapCollectionFilter!]
+  createdAt: DateComparator
+  creator: UserFilter
+  every: RoadmapFilter
+  id: IDComparator
+  length: NumberComparator
+  name: StringComparator
+  or: [RoadmapCollectionFilter!]
+  slugId: StringComparator
+  some: RoadmapFilter
+  updatedAt: DateComparator
+}
+
+input RoadmapFilter {
+  and: [RoadmapFilter!]
+  createdAt: DateComparator
+  creator: UserFilter
+  id: IDComparator
+  name: StringComparator
+  or: [RoadmapFilter!]
+  slugId: StringComparator
+  updatedAt: DateComparator
+}
+
+input RootIssueSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+  sort: IssueSortInput!
+}
+
+enum SLADayCountType {
+  all
+  onlyBusinessDays
+}
+
+input SalesforceMetadataIntegrationComparator {
+  caseMetadata: JSONObject
+}
+
+enum SlaStatus {
+  Breached
+  Completed
+  Failed
+  HighRisk
+  LowRisk
+  MediumRisk
+}
+
+input SlaStatusComparator {
+  eq: SlaStatus
+  in: [SlaStatus!]
+  neq: SlaStatus
+  nin: [SlaStatus!]
+  null: Boolean
+}
+
+input SlaStatusSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input SourceMetadataComparator {
+  null: Boolean
+  salesforceMetadata: SalesforceMetadataIntegrationComparator
+  subType: SubTypeComparator
+}
+
+input SourceTypeComparator {
+  contains: String
+  containsIgnoreCase: String
+  containsIgnoreCaseAndAccent: String
+  endsWith: String
+  eq: String
+  eqIgnoreCase: String
+  in: [String!]
+  neq: String
+  neqIgnoreCase: String
+  nin: [String!]
+  notContains: String
+  notContainsIgnoreCase: String
+  notEndsWith: String
+  notStartsWith: String
+  startsWith: String
+  startsWithIgnoreCase: String
+}
+
+input StartDateSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input StringArrayComparator {
+  every: StringItemComparator
+  length: NumberComparator
+  some: StringItemComparator
+}
+
+input StringComparator {
+  contains: String
+  containsIgnoreCase: String
+  containsIgnoreCaseAndAccent: String
+  endsWith: String
+  eq: String
+  eqIgnoreCase: String
+  in: [String!]
+  neq: String
+  neqIgnoreCase: String
+  nin: [String!]
+  notContains: String
+  notContainsIgnoreCase: String
+  notEndsWith: String
+  notStartsWith: String
+  startsWith: String
+  startsWithIgnoreCase: String
+}
+
+input StringItemComparator {
+  contains: String
+  containsIgnoreCase: String
+  containsIgnoreCaseAndAccent: String
+  endsWith: String
+  eq: String
+  eqIgnoreCase: String
+  in: [String!]
+  neq: String
+  neqIgnoreCase: String
+  nin: [String!]
+  notContains: String
+  notContainsIgnoreCase: String
+  notEndsWith: String
+  notStartsWith: String
+  startsWith: String
+  startsWithIgnoreCase: String
+}
+
+input SubTypeComparator {
+  eq: String
+  in: [String!]
+  neq: String
+  nin: [String!]
+  null: Boolean
+}
+
+input TargetDateSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+type Team {
+  id: ID!
+  name: String!
+}
+
+input TeamCollectionFilter {
+  ancestors: TeamCollectionFilter
+  and: [TeamCollectionFilter!]
+  createdAt: DateComparator
+  every: TeamFilter
+  id: IDComparator
+  length: NumberComparator
+  or: [TeamCollectionFilter!]
+  parent: NullableTeamFilter
+  some: TeamFilter
+  updatedAt: DateComparator
+}
+
+type TeamConnection {
+  nodes: [Team!]!
+}
+
+input TeamFilter {
+  ancestors: TeamCollectionFilter
+  and: [TeamFilter!]
+  createdAt: DateComparator
+  description: NullableStringComparator
+  id: IDComparator
+  issues: IssueCollectionFilter
+  key: StringComparator
+  name: StringComparator
+  or: [TeamFilter!]
+  parent: NullableTeamFilter
+  private: BooleanComparator
+  releasePipelines: ReleasePipelineCollectionFilter
+  retiredAt: NullableDateComparator
+  updatedAt: DateComparator
+}
+
+input TeamSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input TimeInStatusSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+scalar TimelessDate
+
+scalar TimelessDateOrDuration
+
+input TitleSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+input UpdatedAtSort {
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}
+
+type User {
+  avatarUrl: String
+  email: String!
+  id: ID!
+  name: String!
+}
+
+input UserCollectionFilter {
+  active: BooleanComparator
+  admin: BooleanComparator
+  and: [UserCollectionFilter!]
+  app: BooleanComparator
+  assignedIssues: IssueCollectionFilter
+  createdAt: DateComparator
+  displayName: StringComparator
+  email: StringComparator
+  every: UserFilter
+  id: IDComparator
+  invited: BooleanComparator
+  isInvited: BooleanComparator
+  isMe: BooleanComparator
+  length: NumberComparator
+  name: StringComparator
+  or: [UserCollectionFilter!]
+  owner: BooleanComparator
+  some: UserFilter
+  updatedAt: DateComparator
+}
+
+input UserFilter {
+  active: BooleanComparator
+  admin: BooleanComparator
+  and: [UserFilter!]
+  app: BooleanComparator
+  assignedIssues: IssueCollectionFilter
+  createdAt: DateComparator
+  displayName: StringComparator
+  email: StringComparator
+  id: IDComparator
+  invited: BooleanComparator
+  isInvited: BooleanComparator
+  isMe: BooleanComparator
+  name: StringComparator
+  or: [UserFilter!]
+  owner: BooleanComparator
+  updatedAt: DateComparator
+}
+
+type WorkflowState {
+  color: String!
+  id: ID!
+  name: String!
+  type: String!
+}
+
+type WorkflowStateConnection {
+  nodes: [WorkflowState!]!
+}
+
+input WorkflowStateFilter {
+  and: [WorkflowStateFilter!]
+  createdAt: DateComparator
+  description: StringComparator
+  id: IDComparator
+  issues: IssueCollectionFilter
+  name: StringComparator
+  or: [WorkflowStateFilter!]
+  position: NumberComparator
+  team: TeamFilter
+  type: StringComparator
+  updatedAt: DateComparator
+}
+
+input WorkflowStateSort {
+  closedIssuesOrderedByRecency: Boolean = false
+  nulls: PaginationNulls = last
+  order: PaginationSortOrder
+}

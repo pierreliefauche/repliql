@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { WORKFLOW_STATES_QUERY } from '@/lib/queries'
+import { WORKFLOW_STATES_QUERY } from '@/graphql/queries'
 
 interface State {
   id: string
