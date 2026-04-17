@@ -859,12 +859,14 @@ function columnMatchToPredicate(v: ColumnMatch): ColumnPredicate {
   if ('$nin' in v) return { kind: 'not-values', values: (v as { $nin: Primitive[] }).$nin }
   const fields = new Map<string, ColumnPredicate>()
   for (const [k, fv] of Object.entries(v)) {
-    if (fv === MATCH_ALL) {
-      fields.set(k, { kind: 'all' })
-    } else if ('$in' in fv) {
-      fields.set(k, { kind: 'values', values: fv.$in })
-    } else {
-      fields.set(k, { kind: 'not-values', values: (fv as { $nin: Primitive[] }).$nin })
+    if (fv) {
+      if (fv === MATCH_ALL) {
+        fields.set(k, { kind: 'all' })
+      } else if ('$in' in fv) {
+        fields.set(k, { kind: 'values', values: fv.$in })
+      } else {
+        fields.set(k, { kind: 'not-values', values: (fv as { $nin: Primitive[] }).$nin })
+      }
     }
   }
   return { kind: 'fields', fields }
