@@ -3,10 +3,6 @@ import { CombinedError } from '@urql/core'
 
 import type { SerializedOperation, SerializedResult } from './types'
 
-export function generateId(): string {
-  return crypto.randomUUID()
-}
-
 /**
  * Serializes an Operation for transmission over a MessagePort.
  * Preserves all structured-clone-able context fields; drops functions.

@@ -1,3 +1,4 @@
+import { randomId } from '@repliql/utils'
 import type { Exchange, Operation, OperationResult } from '@urql/core'
 import type { Remote } from 'comlink'
 import { proxy, wrap } from 'comlink'
@@ -6,7 +7,7 @@ import { empty, makeSubject, mergeMap, pipe, subscribe } from 'wonka'
 import { heartbeat as navigatorHeartbeat } from './heartbeat'
 import type { SharedService } from './shared-service'
 import type { EndpointConfig, Heartbeat, SerializedOperation, SerializedResult } from './types'
-import { deserializeOp, deserializeResult, generateId, serializeOp, serializeResult } from './utils'
+import { deserializeOp, deserializeResult, serializeOp, serializeResult } from './utils'
 
 type ProxySharedExchangeConfig = { heartbeat?: Heartbeat } & (
   | { sharedService: Remote<SharedService> }
@@ -48,7 +49,7 @@ export function proxySharedExchange({
     const hub: Remote<SharedService> =
       'sharedService' in config ? config.sharedService : wrap(config.endpoint)
 
-    const spokeId = generateId()
+    const spokeId = randomId()
 
     // Maps operation key → Subject used to push hub results into the URQL stream.
     const resultSubjects = new Map<

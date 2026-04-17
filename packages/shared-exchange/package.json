@@ -36,9 +36,10 @@
     "comlink": "^4.4.2"
   },
   "devDependencies": {
-    "@urql/core": "^6.0.0",
-    "typescript": "^6.0.0",
-    "wonka": "^6.3.0"
+    "@repliql/utils": "workspace:*",
+    "@urql/core": "catalog:",
+    "typescript": "catalog:",
+    "wonka": "catalog:"
   },
   "peerDependencies": {
     "@urql/core": ">=5.0.0",
