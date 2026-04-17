@@ -10,7 +10,7 @@ type TableColumnsSelection<DB, Table extends AnyTable<DB>> = {
     | true // select all values from that column
     | {
         // select specific fields for columns that are JSON
-        [Field in string]: true
+        [Field: string]: true
       }
 }
 
@@ -23,7 +23,12 @@ export type ColumnMatch =
   | ScalarMatch
   | {
       // match specific fields for columns that are JSON
-      [Field in string]?: ScalarMatch
+      [Field: string]:
+        | ScalarMatch
+        | {
+            // match specific fields for fields that are JSON objects
+            [Field: string]: ScalarMatch
+          }
     }
 
 type TableColumnsFilter<DB, Table extends AnyTable<DB>> = {

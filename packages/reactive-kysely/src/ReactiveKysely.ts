@@ -197,7 +197,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
     }) as Source<RowUpdate<DB, T>>
   }
 
-  private getChangeSubscriptionSource(sub: ChangeSubscription<DB>): Source<RowUpdate<DB>> {
+  public getChangeSubscriptionSource(sub: ChangeSubscription<DB>): Source<RowUpdate<DB>> {
     const sourceKey = phash(stableStringify(sub))
 
     return this.changeSubscriptionSources.getOrCreate(sourceKey, () => {

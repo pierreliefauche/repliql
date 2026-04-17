@@ -705,7 +705,7 @@ const tests: TestCase[] = [
             age: { $in: [34] },
             metadata: {
               didSignTnC: { $in: [true] },
-              timestamps: MATCH_ALL,
+              timestamps: { createdAt: MATCH_ALL },
             },
           },
         ],
@@ -849,6 +849,94 @@ const tests: TestCase[] = [
       selection: { users: { id: true } },
       filter: {
         users: [{ metadata: { referral: { $in: ['alice', 'bob'] } } }],
+      },
+    },
+  },
+  {
+    it: '2-level JSON = WHERE — subfield scalar preserved',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('timestamps').key('createdAt'), '=', 100),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ metadata: { timestamps: { createdAt: { $in: [100] } } } }] },
+    },
+  },
+  {
+    it: '2-level JSON in WHERE → $in on subfield',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('timestamps').key('loginAt'), 'in', [1, 2]),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ metadata: { timestamps: { loginAt: { $in: [1, 2] } } } }] },
+    },
+  },
+  {
+    it: '2-level JSON != WHERE → $nin on subfield',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('timestamps').key('createdAt'), '!=', 0),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ metadata: { timestamps: { createdAt: { $nin: [0] } } } }] },
+    },
+  },
+  {
+    it: '2-level JSON > WHERE → subfield widens to MATCH_ALL but keeps both keys',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('timestamps').key('createdAt'), '>', 0),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ metadata: { timestamps: { createdAt: MATCH_ALL } } }] },
+    },
+  },
+  {
+    it: 'AND of two 2-level JSON eqs on different subfields → merged into one nested entry',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('timestamps').key('createdAt'), '=', 1)
+      .where(eb => eb.ref('metadata', '->').key('timestamps').key('loginAt'), '=', 2),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [
+          {
+            metadata: {
+              timestamps: {
+                createdAt: { $in: [1] },
+                loginAt: { $in: [2] },
+              },
+            },
+          },
+        ],
+      },
+    },
+  },
+  {
+    it: 'AND of 1-level and 2-level JSON eqs on same column → merged nested',
+    query: db
+      .selectFrom('users')
+      .select('id')
+      .where(eb => eb.ref('metadata', '->').key('didSignTnC'), '=', true)
+      .where(eb => eb.ref('metadata', '->').key('timestamps').key('createdAt'), '=', 1),
+    result: {
+      selection: { users: { id: true } },
+      filter: {
+        users: [
+          {
+            metadata: {
+              didSignTnC: { $in: [true] },
+              timestamps: { createdAt: { $in: [1] } },
+            },
+          },
+        ],
       },
     },
   },

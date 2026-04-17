@@ -9,6 +9,7 @@ type CompiledFilterField =
   | { key: string; type: 'all' }
   | { key: string; type: 'values'; set: Set<string> }
   | { key: string; type: 'not-values'; set: Set<string> }
+  | { key: string; type: 'fields'; fields: CompiledFilterField[] }
 
 type CompiledFilterColumn =
   | { col: string; type: 'all' }
@@ -113,11 +114,20 @@ function compileFilterField(key: string, f: unknown): CompiledFilterField {
   if (f === MATCH_ALL) {
     return { key, type: 'all' }
   }
+  if (isInMatch(f)) {
+    return { key, type: 'values', set: new Set(f.$in.map(v => stableStringify(v))) }
+  }
   if (isNinMatch(f)) {
     return { key, type: 'not-values', set: new Set(f.$nin.map(v => stableStringify(v))) }
   }
-  const inMatch = f as { $in: unknown[] }
-  return { key, type: 'values', set: new Set(inMatch.$in.map(v => stableStringify(v))) }
+  const nested: CompiledFilterField[] = []
+  for (const [subKey, sub] of Object.entries(f as Record<string, unknown>)) {
+    if (sub === undefined) {
+      continue
+    }
+    nested.push(compileFilterField(subKey, sub))
+  }
+  return { key, type: 'fields', fields: nested }
 }
 
 function isInMatch(v: unknown): v is { $in: unknown[] } {
@@ -215,16 +225,20 @@ function matchAllFields(fields: CompiledFilterField[], obj: AnyRow): boolean {
     if (field.type === 'all') {
       return true
     }
+    const value = obj[field.key]
     if (field.type === 'values') {
-      return field.set.has(stableStringify(obj[field.key]))
+      return field.set.has(stableStringify(value))
     }
-
     if (field.type === 'not-values') {
-      return !field.set.has(stableStringify(obj[field.key]))
+      return !field.set.has(stableStringify(value))
     }
 
-    field satisfies never
-    return true
+    field.type satisfies 'fields'
+
+    if (value == null || typeof value !== 'object') {
+      return false
+    }
+    return matchAllFields(field.fields, value as AnyRow)
   })
 }
 

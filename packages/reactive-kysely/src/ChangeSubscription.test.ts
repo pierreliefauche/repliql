@@ -223,6 +223,15 @@ describe('matchTable', () => {
     })
   })
 
+  it('supports 2-level nested JSON field matches', () => {
+    const sub = matchTable(initChangeSubscription<DB>(), 'users', {
+      data: { foo: { bar: { $in: [1] } } } as never,
+    })
+    expect(sub.filter).toEqual({
+      users: [{ data: { foo: { bar: { $in: [1] } } } }],
+    })
+  })
+
   it('keeps $in and $nin entries as separate disjuncts', () => {
     let sub = initChangeSubscription<DB>()
     sub = matchTable(sub, 'users', { id: { $in: [1] } })
