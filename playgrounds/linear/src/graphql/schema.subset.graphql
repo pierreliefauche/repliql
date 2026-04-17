@@ -1351,7 +1351,6 @@ type Query {
   issue(id: String!): Issue!
   issues(after: String, before: String, filter: IssueFilter, first: Int, includeArchived: Boolean, last: Int, orderBy: PaginationOrderBy, sort: [IssueSortInput!]): IssueConnection!
   projects(after: String, before: String, filter: ProjectFilter, first: Int, includeArchived: Boolean, last: Int, orderBy: PaginationOrderBy, sort: [ProjectSortInput!]): ProjectConnection!
-  viewer: User!
   workflowStates(after: String, before: String, filter: WorkflowStateFilter, first: Int, includeArchived: Boolean, last: Int, orderBy: PaginationOrderBy): WorkflowStateConnection!
 }
 
@@ -1681,7 +1680,6 @@ input UpdatedAtSort {
 
 type User {
   avatarUrl: String
-  email: String!
   id: ID!
   name: String!
 }
@@ -1731,6 +1729,7 @@ type WorkflowState {
   color: String!
   id: ID!
   name: String!
+  team: Team!
   type: String!
 }
 

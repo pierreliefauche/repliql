@@ -87,6 +87,7 @@
         "@repliql/reactive-kysely": "workspace:*",
         "@repliql/repliql": "workspace:*",
         "@repliql/shared-exchange": "workspace:*",
+        "@repliql/utils": "workspace:*",
         "@tailwindcss/vite": "^4.2.1",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",

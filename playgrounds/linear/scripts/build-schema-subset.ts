@@ -81,13 +81,10 @@ for (const name of [...usedTypes].sort()) {
   const def = typeNodes.get(name)
   if (!def) continue
 
-  if (
-    def.kind === Kind.OBJECT_TYPE_DEFINITION ||
-    def.kind === Kind.INTERFACE_TYPE_DEFINITION
-  ) {
+  if (def.kind === Kind.OBJECT_TYPE_DEFINITION || def.kind === Kind.INTERFACE_TYPE_DEFINITION) {
     const keep = usedFields.get(name)
     if (!keep || keep.size === 0) continue
-    const fields = (def.fields ?? []).filter((f) => keep.has(f.name.value)).map(cleanField)
+    const fields = (def.fields ?? []).filter(f => keep.has(f.name.value)).map(cleanField)
     if (fields.length === 0) continue
     const cleaned: ObjectTypeDefinitionNode | InterfaceTypeDefinitionNode = {
       ...def,
@@ -115,7 +112,7 @@ for (const name of [...usedTypes].sort()) {
       ...def,
       description: undefined,
       directives: cleanDirectives(def.directives),
-      values: (def.values ?? []).map((v) => ({
+      values: (def.values ?? []).map(v => ({
         ...v,
         description: undefined,
         directives: cleanDirectives(v.directives),
@@ -162,9 +159,7 @@ const stats = {
   types: outputDefs.length,
 }
 console.log(`wrote ${relative(process.cwd(), outputPath)}`)
-console.log(
-  `  ${stats.types} types kept, ${stats.subsetLines} lines (was ${stats.originalLines})`,
-)
+console.log(`  ${stats.types} types kept, ${stats.subsetLines} lines (was ${stats.originalLines})`)
 
 function extractGqlBlocks(src: string): string[] {
   const out: string[] = []
@@ -200,10 +195,7 @@ function walkTypeDeps() {
       const def = typeNodes.get(name)
       if (!def) continue
 
-      if (
-        def.kind === Kind.OBJECT_TYPE_DEFINITION ||
-        def.kind === Kind.INTERFACE_TYPE_DEFINITION
-      ) {
+      if (def.kind === Kind.OBJECT_TYPE_DEFINITION || def.kind === Kind.INTERFACE_TYPE_DEFINITION) {
         const fields = usedFields.get(name)
         if (!fields) continue
         for (const f of def.fields ?? []) {
@@ -270,11 +262,9 @@ function cleanInputValue(v: InputValueDefinitionNode): InputValueDefinitionNode 
   }
 }
 
-function cleanDirectives(
-  dirs: readonly DirectiveNode[] | undefined,
-): readonly DirectiveNode[] {
+function cleanDirectives(dirs: readonly DirectiveNode[] | undefined): readonly DirectiveNode[] {
   // keep only directives the spec defines so buildSchema doesn't choke on
   // custom linear directives we didn't pull in.
   const SPEC = new Set(['deprecated', 'include', 'skip', 'specifiedBy'])
-  return (dirs ?? []).filter((d) => SPEC.has(d.name.value))
+  return (dirs ?? []).filter(d => SPEC.has(d.name.value))
 }

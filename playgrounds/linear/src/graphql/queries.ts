@@ -115,6 +115,10 @@ export const WORKFLOW_STATES_QUERY = gql`
         name
         color
         type
+        team {
+          __typename
+          id
+        }
       }
     }
   }
@@ -146,18 +150,6 @@ export const UPDATE_ISSUE_PRIORITY_MUTATION = gql`
         id
         priority
       }
-    }
-  }
-`
-
-export const VIEWER_QUERY = gql`
-  query Viewer {
-    viewer {
-      __typename
-      id
-      name
-      email
-      avatarUrl
     }
   }
 `
