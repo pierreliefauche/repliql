@@ -126,11 +126,13 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
     return result
   }
 
-  public getEntitiesPointersQuery(args: {
+  public selectEntityPointersQuery(args: {
     __typename: string | [string, ...string[]]
-    where: DataFilter
+    where?: WhereEntityData
+    orderBy?: OrderByEntityData
+    limit?: number
   }) {
-    const { __typename, where } = args
+    const { __typename, where, orderBy, limit } = args
 
     const typenames: string[] = typeof __typename === 'string' ? [__typename] : __typename
     if (!typenames.length) {
@@ -142,12 +144,37 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       .select('__ref')
       .where('__typename', 'in', typenames)
 
-    const conditions = dataFilterToConditions(where)
+    if (where) {
+      const conditions = whereEntityDataToConditions(where)
 
-    for (const { path, condition } of conditions) {
-      if (isValidPath(path)) {
-        query = query.where(
-          eb => {
+      for (const { path, condition } of conditions) {
+        if (isValidPath(path)) {
+          query = query.where(
+            eb => {
+              const [firstKey, ...otherKeys] = path
+              let field = eb.ref('data', '->>').key(firstKey)
+
+              for (const key of otherKeys) {
+                // @ts-expect-error
+                field = field.key(key)
+              }
+
+              return field
+            },
+            condition.operator,
+            // @ts-expect-error
+            condition.value,
+          )
+        }
+      }
+    }
+
+    if (orderBy) {
+      const sorts = orderByEntityDataToOrders(orderBy)
+
+      for (const { path, sortOrder } of sorts) {
+        if (isValidPath(path)) {
+          query = query.orderBy(eb => {
             const [firstKey, ...otherKeys] = path
             let field = eb.ref('data', '->>').key(firstKey)
 
@@ -157,19 +184,23 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
             }
 
             return field
-          },
-          condition.operator,
-          // @ts-expect-error
-          condition.value,
-        )
+          }, sortOrder)
+        }
       }
+    }
+
+    if (limit) {
+      query = query.limit(limit)
     }
 
     return query
   }
 }
 
-type DataFilter = { [key: string]: DataFilter | Primitive | { $in: Primitive[] } }
+type SortOrder = 'asc' | 'desc'
+
+type WhereEntityData = { [key: string]: WhereEntityData | Primitive | { $in: Primitive[] } }
+type OrderByEntityData = { [key: string]: OrderByEntityData | SortOrder }
 
 type FilterCondition = { operator: '='; value: Primitive } | { operator: 'in'; value: Primitive[] }
 
@@ -177,12 +208,12 @@ function isValidPath(path: string[]): path is [string, ...string[]] {
   return path.length > 0
 }
 
-function dataFilterToConditions(
-  dataFilter: DataFilter,
+function whereEntityDataToConditions(
+  where: WhereEntityData,
 ): { path: string[]; condition: FilterCondition }[] {
   const results: { path: string[]; condition: FilterCondition }[] = []
 
-  function traverse(filter: DataFilter, currentPath: string[]) {
+  function traverse(filter: WhereEntityData, currentPath: string[]) {
     for (const [key, value] of Object.entries(filter)) {
       const newPath = [...currentPath, key]
 
@@ -203,13 +234,39 @@ function dataFilterToConditions(
           throw new Error('Invalid data filter $in values')
         }
       } else {
-        // Nested DataFilter
-        value satisfies DataFilter
+        // Nested WhereEntityData
+        value satisfies WhereEntityData
         traverse(value, newPath)
       }
     }
   }
 
-  traverse(dataFilter, [])
+  traverse(where, [])
+  return results
+}
+
+function orderByEntityDataToOrders(
+  orderBy: OrderByEntityData,
+): { path: string[]; sortOrder: SortOrder }[] {
+  const results: { path: string[]; sortOrder: SortOrder }[] = []
+
+  function traverse(orderBy: OrderByEntityData, currentPath: string[]) {
+    for (const [key, value] of Object.entries(orderBy)) {
+      const newPath = [...currentPath, key]
+
+      if (value === 'asc' || value === 'desc') {
+        results.push({
+          path: newPath,
+          sortOrder: value,
+        })
+      } else {
+        // Nested OrderByEntityData
+        value satisfies OrderByEntityData
+        traverse(value, newPath)
+      }
+    }
+  }
+
+  traverse(orderBy, [])
   return results
 }
