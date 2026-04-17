@@ -6,12 +6,7 @@ export const MigrationInit: Migration = {
       .createTable('entities')
       .addColumn('__typename', 'text', col => col.notNull())
       .addColumn('id', 'text', col => col.notNull())
-      .addColumn('__ref', 'text', col =>
-        col
-          .generatedAlwaysAs(sql`__typename || ':' || id`)
-          .stored()
-          .notNull(),
-      )
+      .addColumn('__ref', 'text', col => col.notNull())
       .addColumn('data', 'jsonb', col => col.notNull().defaultTo('{}'))
       .addColumn('updatedByOperationKey', 'integer')
       .addColumn('createdAt', 'text', col => col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))

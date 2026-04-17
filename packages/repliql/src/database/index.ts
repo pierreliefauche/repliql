@@ -1,5 +1,5 @@
 import type { ReactiveKysely } from '@repliql/reactive-kysely'
-import { Entity, EntityRef, isPrimitive, Primitive } from '@repliql/utils'
+import { Entity, EntityRef, getEntityRef, isPrimitive, Primitive } from '@repliql/utils'
 import { type MigrationResultSet, Migrator, sql } from 'kysely'
 
 import type { DatabaseSchema } from './schema'
@@ -50,6 +50,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
     const values = entities.map(data => ({
       __typename: data.__typename,
       id: data.id,
+      __ref: getEntityRef(data),
       data: JSON.stringify(data),
       updatedAt,
       updatedByOperationKey: byOperationKey,
@@ -61,6 +62,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       .onConflict(oc =>
         oc.columns(['__typename', 'id']).doUpdateSet(eb => ({
           data: sql`json_patch(${eb.ref('entities.data')}, ${eb.ref('excluded.data')})`,
+          updatedByOperationKey: eb.ref('excluded.updatedByOperationKey'),
           updatedAt: eb.ref('excluded.updatedAt'),
         })),
       )
@@ -90,6 +92,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       .onConflict(oc =>
         oc.columns(['id']).doUpdateSet(eb => ({
           data: eb.ref('excluded.data'),
+          updatedByOperationKey: eb.ref('excluded.updatedByOperationKey'),
           updatedAt: eb.ref('excluded.updatedAt'),
         })),
       )

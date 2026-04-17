@@ -11,7 +11,7 @@ export type DatabaseSchema = {
 export type EntitiesTable = {
   __typename: string
   id: string
-  __ref: GeneratedAlways<EntityRef>
+  __ref: ColumnType<EntityRef, EntityRef, never>
   data: ColumnType<Record<string, unknown>, string, string>
   updatedByOperationKey: number | null
   createdAt: GeneratedAlways<Timestamp>
@@ -21,6 +21,7 @@ export type EntitiesTable = {
 export type QueriesTable = {
   id: string
   data: unknown
+  updatedByOperationKey: number | null
   createdAt: GeneratedAlways<Timestamp>
   updatedAt: Timestamp
 }
