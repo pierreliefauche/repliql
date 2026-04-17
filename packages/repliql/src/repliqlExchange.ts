@@ -24,7 +24,7 @@ type ResolverContext = {
   entityByRef: DataLoader<string, Entity | undefined>
 }
 
-type Resolvers = Record<
+export type Resolvers = Record<
   'Query' | 'Mutation' | (string & {}),
   Record<string, GraphQLFieldResolver<any, ResolverContext, any, any>>
 >
