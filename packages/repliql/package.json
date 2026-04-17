@@ -16,25 +16,40 @@
     "dist"
   ],
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
     }
   },
   "scripts": {
-    "build": "bun run build:ts && bun run build:types",
-    "build:ts": "bun build ./src/index.ts --outdir ./dist --format esm --minify",
+    "build": "bun run build:ts && bun run build:esm && bun run build:cjs && bun run build:types",
+    "build:cjs": "bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify --packages=external",
+    "build:esm": "bun build ./src/index.ts --outfile ./dist/index.mjs --format esm --minify --packages=external",
+    "build:ts": "bun build ./src/index.ts --outdir ./dist --format esm --minify --packages=external",
     "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap",
-    "dev": "bun build ./src/index.ts --watch --outdir ./dist --format esm",
+    "dev": "bun build ./src/index.ts --watch --outdir ./dist --format esm --packages=external",
     "fmt": "oxfmt --write src",
     "lint": "oxlint src",
-    "test": "bun test src/**/*.test.ts",
-    "test:watch": "bun test src/**/*.test.ts --watch"
+    "test": "bun test ./src/**/*.test.ts ./src/*.test.ts",
+    "test:watch": "bun test ./src/**/*.test.ts ./src/*.test.ts --watch"
+  },
+  "dependencies": {
+    "@repliql/reactive-kysely": "workspace:*",
+    "@repliql/utils": "workspace:*",
+    "@urql/core": "catalog:",
+    "@urql/exchange-execute": "^3.0.0",
+    "dataloader": "^2.2.3",
+    "kysely": "catalog:",
+    "wonka": "catalog:"
+  },
+  "peerDependencies": {
+    "graphql": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "bun-types": "latest",
-    "typescript": "^6.0.0"
+    "graphql": "catalog:"
   }
 }
