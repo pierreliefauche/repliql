@@ -13,6 +13,7 @@ export const MigrationInit: Migration = {
           .notNull(),
       )
       .addColumn('data', 'jsonb', col => col.notNull().defaultTo('{}'))
+      .addColumn('updatedByOperationKey', 'integer')
       .addColumn('createdAt', 'text', col => col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
       .addColumn('updatedAt', 'text', col => col.notNull())
       .addPrimaryKeyConstraint('entities_pk', ['__typename', 'id'])
@@ -23,6 +24,7 @@ export const MigrationInit: Migration = {
       .createTable('queries')
       .addColumn('id', 'text', col => col.notNull())
       .addColumn('data', 'jsonb', col => col.notNull().defaultTo('{}'))
+      .addColumn('updatedByOperationKey', 'integer')
       .addColumn('createdAt', 'text', col => col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
       .addColumn('updatedAt', 'text', col => col.notNull())
       .addPrimaryKeyConstraint('entities_pk', ['id'])

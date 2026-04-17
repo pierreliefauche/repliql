@@ -39,7 +39,6 @@ export function repliqlExchange({ kysely, schema, resolvers }: RepliqlExchangeCo
   return ({ forward, ...input }) => {
     return operations$ => {
       const db = new Database({ kysely })
-
       void db.migrate()
 
       /**

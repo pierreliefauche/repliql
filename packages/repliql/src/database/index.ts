@@ -40,8 +40,8 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
     return this.kysely as unknown as ReactiveKysely<DatabaseSchema>
   }
 
-  public async upsertEntities(args: { entities: Entity[] }) {
-    const { entities } = args
+  public async upsertEntities(args: { entities: Entity[]; byOperationKey: number }) {
+    const { entities, byOperationKey } = args
     if (entities.length === 0) {
       return
     }
@@ -52,6 +52,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       id: data.id,
       data: JSON.stringify(data),
       updatedAt,
+      updatedByOperationKey: byOperationKey,
     }))
 
     await this.client
@@ -66,8 +67,11 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       .execute()
   }
 
-  public async upsertQueries(args: { queries: { id: string; data: unknown }[] }) {
-    const { queries } = args
+  public async upsertQueries(args: {
+    queries: { id: string; data: unknown }[]
+    byOperationKey: number
+  }) {
+    const { queries, byOperationKey } = args
     if (queries.length === 0) {
       return
     }
@@ -77,6 +81,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       id,
       data: JSON.stringify(data),
       updatedAt,
+      updatedByOperationKey: byOperationKey,
     }))
 
     await this.client

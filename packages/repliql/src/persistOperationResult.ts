@@ -42,10 +42,13 @@ export function persistOperationResult({ db }: PersistOperationResultConfig) {
       },
     )
 
-    await db.upsertEntities({ entities: Object.values(entities) })
+    const byOperationKey = operationResult.operation.key
+
+    await db.upsertEntities({ entities: Object.values(entities), byOperationKey })
 
     if (operationResult.operation.kind === 'query') {
       await db.upsertQueries({
+        byOperationKey,
         queries: Object.entries(root).map(([id, data]) => ({
           id,
           data,

@@ -1,10 +1,5 @@
 import type { ColumnType, GeneratedAlways } from 'kysely'
 
-type Generated<T> =
-  T extends ColumnType<infer S, infer I, infer U>
-    ? ColumnType<S, I | undefined, U>
-    : ColumnType<T, T | undefined, T>
-
 type Timestamp = ColumnType<Date, Date | string, Date | string>
 
 export type DatabaseSchema = {
@@ -17,13 +12,14 @@ export type EntitiesTable = {
   id: string
   __ref: GeneratedAlways<string>
   data: ColumnType<Record<string, unknown>, string, string>
-  createdAt: Generated<Timestamp>
+  updatedByOperationKey: number | null
+  createdAt: GeneratedAlways<Timestamp>
   updatedAt: Timestamp
 }
 
 export type QueriesTable = {
   id: string
   data: unknown
-  createdAt: Generated<Timestamp>
+  createdAt: GeneratedAlways<Timestamp>
   updatedAt: Timestamp
 }
