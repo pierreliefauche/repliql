@@ -12,3 +12,10 @@ export { areEqual } from './areEqual'
 export * from './graphql/entities'
 export { transformQueryData } from './graphql/transformQueryData'
 export { getFullFieldName } from './graphql/getFullFieldName'
+export { execute, compile } from './graphql/execute'
+export type {
+  FieldResolver,
+  ResolveInfo,
+  ExecutionResult,
+  CompiledOperation,
+} from './graphql/execute'

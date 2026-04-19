@@ -68,6 +68,7 @@
       "name": "@repliql/utils",
       "version": "0.0.1",
       "dependencies": {
+        "@0no-co/graphql.web": "catalog:",
         "@solana/fast-stable-stringify": "^6.8.0",
         "@urql/core": "catalog:",
       },
@@ -128,6 +129,7 @@
     },
   },
   "catalog": {
+    "@0no-co/graphql.web": "^1.2.0",
     "@urql/core": "^6.0.1",
     "graphql": "^16.13.2",
     "kysely": "^0.28.16",

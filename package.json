@@ -47,6 +47,7 @@
   },
   "packageManager": "bun@1.3.11",
   "catalog": {
+    "@0no-co/graphql.web": "^1.2.0",
     "@urql/core": "^6.0.1",
     "graphql": "^16.13.2",
     "kysely": "^0.28.16",

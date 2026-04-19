@@ -1,3 +1,4 @@
+import { Kind } from '@0no-co/graphql.web'
 import type { AnyVariables } from '@urql/core'
 import type { DocumentNode, FieldNode, OperationDefinitionNode, ValueNode } from 'graphql'
 
@@ -11,23 +12,23 @@ type GetFieldName = (args: {
 
 function getFieldArgumentValue(node: ValueNode, variables: AnyVariables): unknown {
   switch (node.kind) {
-    case 'Variable':
+    case Kind.VARIABLE:
       return variables?.[node.name.value]
-    case 'IntValue':
+    case Kind.INT:
       return parseInt(node.value, 10)
-    case 'FloatValue':
+    case Kind.FLOAT:
       return parseFloat(node.value)
-    case 'StringValue':
+    case Kind.STRING:
       return node.value
-    case 'BooleanValue':
+    case Kind.BOOLEAN:
       return node.value
-    case 'NullValue':
+    case Kind.NULL:
       return null
-    case 'EnumValue':
+    case Kind.ENUM:
       return node.value
-    case 'ListValue':
+    case Kind.LIST:
       return node.values.map(node => getFieldArgumentValue(node, variables))
-    case 'ObjectValue':
+    case Kind.OBJECT:
       return Object.fromEntries(
         node.fields.map(({ name, value }) => [name.value, getFieldArgumentValue(value, variables)]),
       )

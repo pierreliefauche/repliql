@@ -10,7 +10,7 @@
     "preload": ["./test-setup.ts"],
     // Root directory for test discovery
     "root": ".",
-    "pathIgnorePatterns": ["urql-main/**"],
+    "pathIgnorePatterns": ["vendors/**"],
   },
 
   // Build configuration defaults
