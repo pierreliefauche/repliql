@@ -130,6 +130,57 @@ describe('execute', () => {
     })
   })
 
+  it('enters inline fragments regardless of type condition (no schema)', async () => {
+    // Without a schema, inline fragment typeConditions are not filtered.
+    // Every branch is merged in; the resolver is responsible for discrimination
+    // (e.g. via __typename) and may return null/undefined for non-applicable fields.
+    const doc = parse(`{
+      node {
+        __typename
+        ... on User { name }
+        ... on Post { title }
+      }
+    }`)
+    const result = await execute({
+      document: doc,
+      context: {},
+      fieldResolver: (src, _args, _ctx, info) => {
+        if (info.fieldName === 'node') return { __typename: 'User', name: 'Ada' }
+        return (src as Record<string, unknown>)[info.fieldName] ?? null
+      },
+    })
+    // `title` is selected and resolved to null because the resolver doesn't
+    // provide it — the executor did not skip the `... on Post` branch.
+    expect(result).toEqual({
+      data: { node: { __typename: 'User', name: 'Ada', title: null } },
+    })
+  })
+
+  it('merges sibling inline fragments selecting the same field on different types', async () => {
+    // Both branches contribute selections for `id`, which get merged into one
+    // resolver call — same as same-key field merging at the top level.
+    const doc = parse(`{
+      node {
+        ... on User { id }
+        ... on Post { id }
+      }
+    }`)
+    let idCalls = 0
+    const result = await execute({
+      document: doc,
+      context: {},
+      fieldResolver: (_src, _args, _ctx, info) => {
+        if (info.fieldName === 'node') return { id: '1' }
+        if (info.fieldName === 'id') {
+          idCalls++
+          return '1'
+        }
+      },
+    })
+    expect(result).toEqual({ data: { node: { id: '1' } } })
+    expect(idCalls).toBe(1)
+  })
+
   it('reports resolver errors without aborting siblings', async () => {
     const doc = parse(`{
       ok
