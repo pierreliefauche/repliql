@@ -1,4 +1,4 @@
-import { stableStringify, isPrimitive } from '@repliql/utils'
+import { stableStringify, areEqual } from '@repliql/utils'
 
 import { type ChangeSubscription, MATCH_ALL } from './ChangeSubscription'
 import type { RowUpdate } from './types'
@@ -281,21 +281,5 @@ function selectionChanged(
 }
 
 function areDifferent(a: unknown, b: unknown): boolean {
-  if (a === b) {
-    return false
-  }
-
-  if (a == null && b == null) {
-    // We consider undefined and null to be "equal"
-    return false
-  }
-
-  if (isPrimitive(a) || isPrimitive(b)) {
-    // One of the values is a primitive, so equality would
-    // have been caught by strict equality above
-    return true
-  }
-
-  // Comparing non primitives
-  return stableStringify(a) !== stableStringify(b)
+  return !areEqual(a, b)
 }

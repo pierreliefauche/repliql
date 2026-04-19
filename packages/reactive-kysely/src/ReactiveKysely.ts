@@ -1,4 +1,4 @@
-import { type HashValue, phash, stableStringify, SourceMap } from '@repliql/utils'
+import { type HashValue, phash, stableStringify, SourceMap, areEqual } from '@repliql/utils'
 import { CompiledQuery, Kysely, KyselyConfig, ParseJSONResultsPlugin, sql } from 'kysely'
 import {
   concat,
@@ -30,10 +30,12 @@ type CreateCallbackFunction = (
 export type ReactiveKyselyConfig = KyselyConfig & {
   createCallbackFunction: CreateCallbackFunction
   queryUpdateDebounceMs?: number
+  ignoreColumnUpdate?: (table: string, column: string) => boolean
 }
 
 export class ReactiveKysely<DB = any> extends Kysely<DB> {
   protected createCallbackFunction: CreateCallbackFunction
+  private ignoreColumnUpdate: (table: string, column: string) => boolean
 
   private defaultQueryUpdateDebounceMs: number
   private queryUpdateDebounceMs = new Map<HashValue, number>()
@@ -51,7 +53,12 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
         [Table in AnyTable<DB>]: { name: string; isJson: boolean }[]
       }>
 
-  constructor({ createCallbackFunction, queryUpdateDebounceMs, ...config }: ReactiveKyselyConfig) {
+  constructor({
+    createCallbackFunction,
+    queryUpdateDebounceMs,
+    ignoreColumnUpdate,
+    ...config
+  }: ReactiveKyselyConfig) {
     // Ensure the plugin to parse JSON is present
     const plugins = config.plugins || []
 
@@ -66,6 +73,8 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
 
     this.createCallbackFunction = createCallbackFunction
     this.defaultQueryUpdateDebounceMs = queryUpdateDebounceMs ?? DEFAULT_QUERY_UPDATE_DEBOUNCE_MS
+    this.ignoreColumnUpdate =
+      ignoreColumnUpdate || ((_table: string, column: string) => column.startsWith('$'))
   }
 
   private async getDbSchema(): NonNullable<ReactiveKysely<DB>['dbSchemaPromise']> {
@@ -193,7 +202,28 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
     return this.tableRowUpdatesSources.getOrCreate(table, () => {
       return pipe(
         this.rowUpdatesSubject.source,
-        filter(rowUpdate => rowUpdate.table === table),
+        filter(rowUpdate => {
+          if (rowUpdate.table !== table) {
+            return false
+          }
+
+          const { newRow, oldRow } = rowUpdate as RowUpdate<DB, T>
+
+          if (!newRow || !oldRow) {
+            return true
+          }
+
+          const columns = Object.keys(newRow || oldRow) as (keyof Row<DB, T> & string)[]
+          for (const column of columns) {
+            if (!this.ignoreColumnUpdate(rowUpdate.table, column)) {
+              if (!areEqual(oldRow[column], newRow[column])) {
+                return true
+              }
+            }
+          }
+
+          return false
+        }),
         share,
         onStart(() => void this.watchTable(table)),
       )

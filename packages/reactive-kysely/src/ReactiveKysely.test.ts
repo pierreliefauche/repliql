@@ -34,9 +34,16 @@ interface Posts {
   title: string
 }
 
+interface Widgets {
+  id: number
+  name: string
+  $sync: number
+}
+
 interface DB {
   users: Users
   posts: Posts
+  widgets: Widgets
 }
 
 type KyselySqliteStatement = {
@@ -131,6 +138,7 @@ beforeEach(async () => {
     db,
   )
   await sql`CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT)`.execute(db)
+  await sql`CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT, "$sync" INTEGER)`.execute(db)
 })
 
 afterEach(async () => {
@@ -1062,10 +1070,13 @@ describe('ReactiveKysely — watchAllTables path', () => {
     expect(triggers.map(t => t.name)).toEqual([
       'repliql_delete_posts',
       'repliql_delete_users',
+      'repliql_delete_widgets',
       'repliql_insert_posts',
       'repliql_insert_users',
+      'repliql_insert_widgets',
       'repliql_update_posts',
       'repliql_update_users',
+      'repliql_update_widgets',
     ])
 
     unsubscribe()
@@ -1754,5 +1765,254 @@ describe('ReactiveKysely — queryUpdateDebounceMs', () => {
 
     a.unsubscribe()
     b.unsubscribe()
+  })
+})
+
+describe('ReactiveKysely — ignoreColumnUpdate default behavior', () => {
+  it('does not re-emit when only $-prefixed column changes', async () => {
+    await db.insertInto('widgets').values({ id: 1, name: 'widget1', $sync: 0 }).execute()
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(db.selectFrom('widgets').selectAll()))
+    await flush()
+    expect(emissions).toHaveLength(1)
+    expect(emissions[0]).toEqual([{ id: 1, name: 'widget1', $sync: 0 }])
+
+    db.executeQueryCount = 0
+
+    // Update only the $sync column (should be ignored by default)
+    await db.updateTable('widgets').set({ $sync: 1 }).where('id', '=', 1).execute()
+    await flush()
+
+    // Should not have triggered a refetch because only ignored column changed
+    expect(db.executeQueryCount).toBe(0)
+    expect(emissions).toHaveLength(1)
+
+    unsubscribe()
+  })
+
+  it('re-emits when non-ignored column changes', async () => {
+    await db.insertInto('widgets').values({ id: 1, name: 'widget1', $sync: 0 }).execute()
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(db.selectFrom('widgets').selectAll()))
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    // Update the name column (not ignored)
+    await db.updateTable('widgets').set({ name: 'widget1-updated' }).where('id', '=', 1).execute()
+    await flush()
+
+    expect(emissions).toHaveLength(2)
+    expect(emissions[1]).toEqual([{ id: 1, name: 'widget1-updated', $sync: 0 }])
+
+    unsubscribe()
+  })
+
+  it('re-emits when both ignored and non-ignored columns change', async () => {
+    await db.insertInto('widgets').values({ id: 1, name: 'widget1', $sync: 0 }).execute()
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(db.selectFrom('widgets').selectAll()))
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    // Update both $sync (ignored) and name (not ignored)
+    await db
+      .updateTable('widgets')
+      .set({ name: 'widget1-updated', $sync: 1 })
+      .where('id', '=', 1)
+      .execute()
+    await flush()
+
+    expect(emissions).toHaveLength(2)
+    expect(emissions[1]).toEqual([{ id: 1, name: 'widget1-updated', $sync: 1 }])
+
+    unsubscribe()
+  })
+
+  it('still emits on INSERT even if row has $-prefixed column', async () => {
+    const { emissions, unsubscribe } = collect(db.liveQuery(db.selectFrom('widgets').selectAll()))
+    await flush()
+    expect(emissions).toHaveLength(1)
+    expect(emissions[0]).toEqual([])
+
+    // INSERT should always trigger emission
+    await db.insertInto('widgets').values({ id: 1, name: 'widget1', $sync: 0 }).execute()
+    await flush()
+
+    expect(emissions).toHaveLength(2)
+    expect(emissions[1]).toEqual([{ id: 1, name: 'widget1', $sync: 0 }])
+
+    unsubscribe()
+  })
+
+  it('still emits on DELETE even if row has $-prefixed column', async () => {
+    await db.insertInto('widgets').values({ id: 1, name: 'widget1', $sync: 0 }).execute()
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(db.selectFrom('widgets').selectAll()))
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    // DELETE should always trigger emission
+    await db.deleteFrom('widgets').where('id', '=', 1).execute()
+    await flush()
+
+    expect(emissions).toHaveLength(2)
+    expect(emissions[1]).toEqual([])
+
+    unsubscribe()
+  })
+
+  it('multiple consecutive updates to only $-prefixed column do not trigger refetch', async () => {
+    await db.insertInto('widgets').values({ id: 1, name: 'widget1', $sync: 0 }).execute()
+
+    const { emissions, unsubscribe } = collect(db.liveQuery(db.selectFrom('widgets').selectAll()))
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    db.executeQueryCount = 0
+
+    // Multiple updates to only the ignored column
+    await db.updateTable('widgets').set({ $sync: 1 }).where('id', '=', 1).execute()
+    await db.updateTable('widgets').set({ $sync: 2 }).where('id', '=', 1).execute()
+    await db.updateTable('widgets').set({ $sync: 3 }).where('id', '=', 1).execute()
+    await flush()
+
+    // No refetch should have been triggered
+    expect(db.executeQueryCount).toBe(0)
+    expect(emissions).toHaveLength(1)
+
+    unsubscribe()
+  })
+})
+
+describe('ReactiveKysely — custom ignoreColumnUpdate', () => {
+  let customSqlite: Database
+  let customAdapted: ReturnType<typeof adaptDatabase>
+  let customDb: InstrumentedReactiveKysely<DB>
+
+  beforeEach(async () => {
+    // Create a separate SQLite database for custom ignoreColumnUpdate tests
+    customSqlite = new Database(':memory:')
+    customAdapted = adaptDatabase(customSqlite)
+
+    customDb = new InstrumentedReactiveKysely<DB>({
+      dialect: new SqliteDialect({ database: customAdapted }),
+      createCallbackFunction: (name, cb) => {
+        customAdapted.function(name, (oldJson: any, newJson: any) => {
+          cb(oldJson, newJson)
+          return null
+        })
+      },
+      queryUpdateDebounceMs: 0,
+      ignoreColumnUpdate: (table, column) => {
+        // Ignore age column on users table, plus default $ prefix
+        if (table === 'users' && column === 'age') return true
+        return column.startsWith('$')
+      },
+    })
+
+    // Create the same tables
+    await sql`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER, metadata TEXT)`.execute(
+      customDb,
+    )
+    await sql`CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT)`.execute(
+      customDb,
+    )
+  })
+
+  afterEach(async () => {
+    await customDb.destroy()
+  })
+
+  it('does not re-emit when custom-ignored column changes', async () => {
+    await customDb
+      .insertInto('users')
+      .values({ id: 1, name: 'alice', age: 30, metadata: null })
+      .execute()
+
+    const { emissions, unsubscribe } = collect(
+      customDb.liveQuery(customDb.selectFrom('users').selectAll()),
+    )
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    customDb.executeQueryCount = 0
+
+    // Update only the age column (custom ignored)
+    await customDb.updateTable('users').set({ age: 31 }).where('id', '=', 1).execute()
+    await flush()
+
+    // Should not have triggered a refetch
+    expect(customDb.executeQueryCount).toBe(0)
+    expect(emissions).toHaveLength(1)
+
+    unsubscribe()
+  })
+
+  it('re-emits when non-custom-ignored column changes', async () => {
+    await customDb
+      .insertInto('users')
+      .values({ id: 1, name: 'alice', age: 30, metadata: null })
+      .execute()
+
+    const { emissions, unsubscribe } = collect(
+      customDb.liveQuery(customDb.selectFrom('users').selectAll()),
+    )
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    // Update the name column (not ignored)
+    await customDb.updateTable('users').set({ name: 'alicia' }).where('id', '=', 1).execute()
+    await flush()
+
+    expect(emissions).toHaveLength(2)
+    expect(emissions[1]).toEqual([{ id: 1, name: 'alicia', age: 30, metadata: null }])
+
+    unsubscribe()
+  })
+
+  it('re-emits when both custom-ignored and non-ignored columns change', async () => {
+    await customDb
+      .insertInto('users')
+      .values({ id: 1, name: 'alice', age: 30, metadata: null })
+      .execute()
+
+    const { emissions, unsubscribe } = collect(
+      customDb.liveQuery(customDb.selectFrom('users').selectAll()),
+    )
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    // Update both age (ignored) and name (not ignored)
+    await customDb
+      .updateTable('users')
+      .set({ name: 'alicia', age: 31 })
+      .where('id', '=', 1)
+      .execute()
+    await flush()
+
+    expect(emissions).toHaveLength(2)
+    expect(emissions[1]).toEqual([{ id: 1, name: 'alicia', age: 31, metadata: null }])
+
+    unsubscribe()
+  })
+
+  it('custom ignore only applies to specified table', async () => {
+    // Age is ignored on users table, but posts table is unaffected
+    await customDb.insertInto('posts').values({ id: 1, user_id: 1, title: 'Hello' }).execute()
+
+    const { emissions, unsubscribe } = collect(
+      customDb.liveQuery(customDb.selectFrom('posts').selectAll()),
+    )
+    await flush()
+    expect(emissions).toHaveLength(1)
+
+    // Update posts table - should trigger refetch normally
+    await customDb.updateTable('posts').set({ title: 'World' }).where('id', '=', 1).execute()
+    await flush()
+
+    expect(emissions).toHaveLength(2)
+    expect(emissions[1]).toEqual([{ id: 1, user_id: 1, title: 'World' }])
+
+    unsubscribe()
   })
 })
