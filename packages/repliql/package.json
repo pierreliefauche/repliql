@@ -46,10 +46,6 @@
     "kysely": "catalog:",
     "wonka": "catalog:"
   },
-  "peerDependencies": {
-    "graphql": "catalog:"
-  },
-  "devDependencies": {
-    "graphql": "catalog:"
-  }
+  "devDependencies": {},
+  "peerDependencies": {}
 }

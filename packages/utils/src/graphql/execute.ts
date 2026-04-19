@@ -21,7 +21,12 @@ export interface ResolveInfo {
   readonly path: readonly (string | number)[]
 }
 
-export type FieldResolver<TSource extends Entity, TContext, TArgs = any, TResult = unknown> = (
+export type FieldResolver<
+  TContext,
+  TSource extends Entity = Entity,
+  TArgs = any,
+  TResult = unknown,
+> = (
   source: TSource | undefined,
   args: TArgs,
   context: TContext,
@@ -38,14 +43,14 @@ export interface DocumentExecuteOptions<TContext> {
   document: DocumentNode
   operationName?: string
   context: TContext
-  fieldResolver: FieldResolver<any, TContext>
+  fieldResolver: FieldResolver<TContext>
   variableValues?: Record<string, unknown>
 }
 
 export interface CompiledExecuteOptions<TContext> {
   compiled: CompiledOperation
   context: TContext
-  fieldResolver: FieldResolver<any, TContext>
+  fieldResolver: FieldResolver<TContext>
   variableValues?: Record<string, unknown>
 }
 
@@ -80,9 +85,7 @@ export function compile(document: DocumentNode, operationName?: string): Compile
 
   if (!operation) {
     throw new GraphQLError(
-      operationName
-        ? `Unknown operation named "${operationName}".`
-        : 'Must provide an operation.',
+      operationName ? `Unknown operation named "${operationName}".` : 'Must provide an operation.',
     )
   }
 
@@ -203,10 +206,7 @@ export async function execute<TContext>(
     return true
   }
 
-  function collectFields(
-    selectionSet: SelectionSetNode,
-    groups: Map<string, FieldNode[]>,
-  ): void {
+  function collectFields(selectionSet: SelectionSetNode, groups: Map<string, FieldNode[]>): void {
     for (const sel of selectionSet.selections) {
       if (!directivesPass(sel.directives)) continue
       if (sel.kind === 'Field') {
@@ -275,7 +275,7 @@ export async function execute<TContext>(
 
     let resolved: unknown
     try {
-      resolved = fieldResolver(source, args, context, info)
+      resolved = fieldResolver(source as Entity, args, context, info)
       if (resolved && typeof (resolved as Promise<unknown>).then === 'function') {
         resolved = await resolved
       }

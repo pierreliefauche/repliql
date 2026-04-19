@@ -1,4 +1,4 @@
-import { EntityRef } from '@repliql/utils'
+import { Entity, EntityRef } from '@repliql/utils'
 import type { ColumnType, GeneratedAlways } from 'kysely'
 
 type Timestamp = ColumnType<Date, Date | string, Date | string>
@@ -12,7 +12,7 @@ export type EntitiesTable = {
   __typename: string
   id: string
   __ref: ColumnType<EntityRef, EntityRef, never>
-  data: ColumnType<Record<string, unknown>, string, string>
+  data: ColumnType<Entity, string, string>
   updatedByOperationKey: number | null
   createdAt: GeneratedAlways<Timestamp>
   updatedAt: Timestamp

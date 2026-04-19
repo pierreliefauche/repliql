@@ -40,12 +40,6 @@
         "kysely": "catalog:",
         "wonka": "catalog:",
       },
-      "devDependencies": {
-        "graphql": "catalog:",
-      },
-      "peerDependencies": {
-        "graphql": "catalog:",
-      },
     },
     "packages/shared-exchange": {
       "name": "@repliql/shared-exchange",
