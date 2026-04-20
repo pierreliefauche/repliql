@@ -1,6 +1,13 @@
 import { Kind } from '@0no-co/graphql.web'
 import type { AnyVariables } from '@urql/core'
-import type { DocumentNode, FieldNode, OperationDefinitionNode, ValueNode } from 'graphql'
+import type {
+  DocumentNode,
+  FieldNode,
+  FragmentDefinitionNode,
+  OperationDefinitionNode,
+  SelectionSetNode,
+  ValueNode,
+} from 'graphql'
 
 import { type Entity, isEntity } from './entities'
 
@@ -51,6 +58,14 @@ export function transformQueryData<T, Output = any, Data = any>(
   { query, data, variables = {}, getFieldName }: TransformOptions<Data>,
   replacer: (entity: Entity) => T,
 ): Output {
+  // Build a map of fragment definitions for lookups
+  const fragments = new Map<string, FragmentDefinitionNode>()
+  for (const def of query.definitions) {
+    if (def.kind === Kind.FRAGMENT_DEFINITION) {
+      fragments.set(def.name.value, def)
+    }
+  }
+
   function fieldKey(field: FieldNode): string {
     const args = field.arguments?.length
       ? Object.fromEntries(
@@ -67,6 +82,35 @@ export function transformQueryData<T, Output = any, Data = any>(
     })
   }
 
+  function processSelectionSet(
+    selectionSet: SelectionSetNode,
+    value: any,
+    transformed: Record<string, unknown>,
+  ): void {
+    for (const sel of selectionSet.selections) {
+      switch (sel.kind) {
+        case Kind.FIELD: {
+          // GraphQL responses use alias as key when present
+          const responseKey = sel.alias?.value ?? sel.name.value
+          transformed[fieldKey(sel)] = transformNode(sel, value[responseKey])
+          break
+        }
+        case Kind.FRAGMENT_SPREAD: {
+          const fragment = fragments.get(sel.name.value)
+          if (fragment?.selectionSet) {
+            processSelectionSet(fragment.selectionSet, value, transformed)
+          }
+          break
+        }
+        case Kind.INLINE_FRAGMENT:
+          if (sel.selectionSet) {
+            processSelectionSet(sel.selectionSet, value, transformed)
+          }
+          break
+      }
+    }
+  }
+
   function transformNode(node: OperationDefinitionNode | FieldNode, value: any): Transformed<T> {
     if (value == null) {
       return value
@@ -80,10 +124,7 @@ export function transformQueryData<T, Output = any, Data = any>(
       const transformed: any = {}
 
       if (node.selectionSet) {
-        for (const sel of node.selectionSet.selections) {
-          if (sel.kind !== 'Field') continue
-          transformed[fieldKey(sel)] = transformNode(sel, value[sel.name.value])
-        }
+        processSelectionSet(node.selectionSet, value, transformed)
       }
 
       // __typename might not be in the selection set
