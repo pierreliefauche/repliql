@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ISSUES_QUERY } from '@/graphql/queries'
 
 export function IssuesView() {
+  console.log('============= RENDER ISSUES VIEW -3959508671')
   const [, navigate] = useLocation()
   const [{ data, fetching, error }] = useQuery({
     query: ISSUES_QUERY,

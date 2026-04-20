@@ -21,6 +21,7 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
   const [{ data, fetching }] = useQuery({
     query: ISSUE_DETAIL_QUERY,
     variables: { id: issueId },
+    requestPolicy: 'cache-and-network',
   })
   const [, updatePriority] = useMutation(UPDATE_ISSUE_PRIORITY_MUTATION)
   const [, updateState] = useMutation(UPDATE_ISSUE_STATE_MUTATION)

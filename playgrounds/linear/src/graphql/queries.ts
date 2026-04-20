@@ -1,31 +1,83 @@
 import { gql } from 'urql'
 
+const ISSUE_ITEM_FRAGMENT = gql`
+  fragment IssueItem on Issue {
+    __typename
+    id
+    identifier
+    title
+    priority
+    state {
+      __typename
+      id
+      name
+      color
+    }
+    assignee {
+      __typename
+      id
+      name
+      avatarUrl
+    }
+    createdAt
+    updatedAt
+  }
+`
+
+const ISSUE_DETAIL_FRAGMENT = gql`
+  fragment IssueDetail on Issue {
+    __typename
+    id
+    identifier
+    title
+    description
+    priority
+    estimate
+    url
+    state {
+      __typename
+      id
+      name
+      color
+    }
+    assignee {
+      __typename
+      id
+      name
+      avatarUrl
+    }
+    labels {
+      nodes {
+        __typename
+        id
+        name
+        color
+      }
+    }
+    project {
+      __typename
+      id
+      name
+    }
+    team {
+      __typename
+      id
+    }
+    createdAt
+    updatedAt
+  }
+`
+
 export const ISSUES_QUERY = gql`
   query Issues($first: Int) {
     issues(first: $first, orderBy: updatedAt) {
       nodes {
-        __typename
-        id
-        identifier
-        title
-        priority
-        state {
-          __typename
-          id
-          name
-          color
-        }
-        assignee {
-          __typename
-          id
-          name
-          avatarUrl
-        }
-        createdAt
-        updatedAt
+        ...IssueItem
       }
     }
   }
+
+  ${ISSUE_ITEM_FRAGMENT}
 `
 
 export const PROJECTS_QUERY = gql`
@@ -63,47 +115,11 @@ export const PROJECTS_QUERY = gql`
 export const ISSUE_DETAIL_QUERY = gql`
   query IssueDetail($id: String!) {
     issue(id: $id) {
-      __typename
-      id
-      identifier
-      title
-      description
-      priority
-      estimate
-      url
-      state {
-        __typename
-        id
-        name
-        color
-      }
-      assignee {
-        __typename
-        id
-        name
-        avatarUrl
-      }
-      labels {
-        nodes {
-          __typename
-          id
-          name
-          color
-        }
-      }
-      project {
-        __typename
-        id
-        name
-      }
-      team {
-        __typename
-        id
-      }
-      createdAt
-      updatedAt
+      ...IssueDetail
     }
   }
+
+  ${ISSUE_DETAIL_FRAGMENT}
 `
 
 export const WORKFLOW_STATES_QUERY = gql`
