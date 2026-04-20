@@ -1,12 +1,13 @@
 import type { Resolvers } from '@repliql/repliql'
-import { getEntityPointer as pointsTo } from '@repliql/utils'
+import { getEntityPointer } from '@repliql/utils'
+
+function pointsTo(__typename: string, id: string) {
+  return getEntityPointer({ __typename, id })
+}
 
 export const resolvers: Resolvers = {
   Query: {
-    issue: (_, args: { id: string }, _ctx) => ({
-      __typename: 'Issue',
-      id: args.id,
-    }),
+    issue: (_, args: { id: string }, _ctx) => pointsTo('Issue', args.id),
 
     // issues: async (_, args: { first: number; orderBy: string }, ctx) => {
     //   const issues = await ctx.filterEntityPointers({
@@ -38,15 +39,40 @@ export const resolvers: Resolvers = {
       const states = await ctx.filterEntityPointers({
         __typename: 'WorkflowState',
         where: {
-          team: pointsTo({ __typename: 'Team', id: teamId }),
+          team: pointsTo('Team', teamId),
         },
         orderBy: {
           id: 'asc',
         },
       })
 
+      if (!states.length) {
+        throw new Error('not fetched')
+      }
+
       return { nodes: states }
     },
   },
-  Mutation: {},
+  Mutation: {
+    issueUpdate: async (
+      _,
+      args: { id: string; input: { stateId?: string; priority?: number } },
+      ctx,
+    ) => {
+      const { id: issueId, input } = args
+
+      await ctx.db.upsertEntities({
+        byOperationKey: ctx.operation.key,
+        entities: [
+          {
+            __typename: 'Issue',
+            id: issueId,
+            priority: input.priority,
+            state: input.stateId ? pointsTo('WorkflowState', input.stateId) : undefined,
+          },
+        ],
+      })
+      return pointsTo('Issue', issueId)
+    },
+  },
 }

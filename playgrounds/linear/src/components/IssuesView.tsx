@@ -8,12 +8,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ISSUES_QUERY } from '@/graphql/queries'
 
 export function IssuesView() {
-  console.log('============= RENDER ISSUES VIEW -3959508671')
   const [, navigate] = useLocation()
   const [{ data, fetching, error }] = useQuery({
     query: ISSUES_QUERY,
     variables: { first: 50 },
   })
+
+  console.log('RENDER ISSUES LIST', { fetching, data, error })
 
   if (error) {
     return (
@@ -28,7 +29,7 @@ export function IssuesView() {
       <div className="flex-1 overflow-auto p-6">
         <h1 className="mb-6 text-lg font-semibold">Issues</h1>
 
-        {fetching ? (
+        {fetching && !data ? (
           <div className="space-y-3">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-14 w-full rounded-lg" />

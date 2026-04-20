@@ -14,6 +14,7 @@ import {
   share,
   debounce,
   Source,
+  tap,
 } from 'wonka'
 
 import { type ChangeSubscription, changeSubscriptionTables } from './ChangeSubscription'
@@ -77,6 +78,20 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
       ignoreColumnUpdate || ((_table: string, column: string) => column.startsWith('$'))
   }
 
+  private get logger() {
+    return {
+      error(...args: unknown[]) {
+        console.error('[ReactiveKysely]', ...args)
+      },
+      warn(...args: unknown[]) {
+        console.warn('[ReactiveKysely]', ...args)
+      },
+      debug(...args: unknown[]) {
+        console.debug('[ReactiveKysely]', ...args)
+      },
+    }
+  }
+
   private async getDbSchema(): NonNullable<ReactiveKysely<DB>['dbSchemaPromise']> {
     if (this.dbSchemaPromise) {
       return this.dbSchemaPromise
@@ -129,6 +144,8 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
         const callback = (oldJson: string | null, newJson: string | null) => {
           const oldRow = oldJson ? (JSON.parse(oldJson) as Row<DB, Table>) : null
           const newRow = newJson ? (JSON.parse(newJson) as Row<DB, Table>) : null
+
+          this.logger.debug(`Table callback table=${table}`, { oldRow, newRow })
 
           this.rowUpdatesSubject.next({
             table,
@@ -224,6 +241,11 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
 
           return false
         }),
+        tap(rowUpdate =>
+          this.logger.debug(`Table row update source table=${rowUpdate.table}`, rowUpdate),
+        ),
+        onStart(() => this.logger.debug(`Start table row update source table=${table}`)),
+        onEnd(() => this.logger.warn(`End table row update source table=${table}`)),
         share,
         onStart(() => void this.watchTable(table)),
       )
@@ -244,7 +266,12 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
       return pipe(
         updatesSource,
         filter(rowUpdate => isChangeSubscriptionUpdate(compiledChangeSubscription, rowUpdate)),
-        share,
+        tap(rowUpdate =>
+          this.logger.debug(`Change Subscription source table=${rowUpdate.table}`, rowUpdate, sub),
+        ),
+        onStart(() => this.logger.debug(`Start Change Subscription source`, sub)),
+        onEnd(() => this.logger.warn(`End Change Subscription source`, sub)),
+        // share,
       )
     })
   }
@@ -294,6 +321,13 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
         onEnd(() => {
           lastSeenDataHash = undefined
         }),
+        tap(results =>
+          this.logger.debug(`Query Update source`, {
+            sql: compiledQuery.sql,
+            parameters: compiledQuery.parameters,
+            results,
+          }),
+        ),
         share,
       )
     }

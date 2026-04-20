@@ -21,17 +21,21 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
   const [{ data, fetching }] = useQuery({
     query: ISSUE_DETAIL_QUERY,
     variables: { id: issueId },
-    requestPolicy: 'cache-and-network',
+    // requestPolicy: 'cache-and-network',
   })
   const [, updatePriority] = useMutation(UPDATE_ISSUE_PRIORITY_MUTATION)
   const [, updateState] = useMutation(UPDATE_ISSUE_STATE_MUTATION)
 
   const issue = data?.issue
 
+  console.log('RENDER ISSUE DETAIL', { fetching, data })
+
+  const skeleton = fetching && !issue
+
   return (
     <div className="flex h-full flex-col border-l">
       <div className="flex items-center justify-between border-b px-4 py-3">
-        {fetching ? (
+        {skeleton ? (
           <Skeleton className="h-4 w-24" />
         ) : (
           <span className="font-mono text-xs text-muted-foreground">{issue?.identifier}</span>
@@ -42,7 +46,7 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {fetching ? (
+        {skeleton ? (
           <div className="space-y-4">
             <Skeleton className="h-5 w-full" />
             <Skeleton className="h-4 w-3/4" />

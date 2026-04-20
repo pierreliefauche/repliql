@@ -24,21 +24,10 @@ import {
   OperationResult,
   makeResult,
   makeErrorResult,
+  formatDocument,
 } from '@urql/core'
 import DataLoader from 'dataloader'
-import {
-  filter,
-  make,
-  map,
-  merge,
-  mergeMap,
-  onEnd,
-  onStart,
-  pipe,
-  subscribe,
-  takeUntil,
-  tap,
-} from 'wonka'
+import { filter, make, map, merge, mergeMap, pipe, share, subscribe, takeUntil, tap } from 'wonka'
 
 import { Database } from './database'
 import type { DatabaseSchema } from './database/schema'
@@ -65,21 +54,46 @@ type RepliqlExchangeConfig = {
   resolvers: Resolvers
 }
 
+/** Adds unique typenames to query (for invalidating cache entries) */
+export const mapTypeNames = (operation: Operation): Operation => {
+  const query = formatDocument(operation.query)
+  if (query !== operation.query) {
+    const formattedOperation = makeOperation(operation.kind, operation)
+    formattedOperation.query = query
+    return formattedOperation
+  } else {
+    return operation
+  }
+}
+
 export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): Exchange {
   return ({ forward, ...input }) => {
-    return operations$ => {
+    return _operations$ => {
       const db = new Database({ kysely })
       void db.migrate()
 
       const liveQueryOperations = new Map<
         number,
-        { operation: Operation; unsubscribeFromChanges?: () => void }
+        {
+          operation: Operation
+          unsubscribeFromChanges?: () => void
+          changeSubs?: ChangeSubscription<DatabaseSchema>[]
+          visits?: unknown
+        }
       >()
 
-      operations$ = pipe(
-        operations$,
+      // @ts-ignore
+      window.dumpLiveQueries = () => {
+        for (const [key, q] of liveQueryOperations.entries()) {
+          console.log(key, q)
+        }
+      }
+
+      const operations$ = pipe(
+        _operations$,
         // Add an operation id to all operations
         map(op => {
+          mapTypeNames
           if (!op.context.operationId) {
             op.context.operationId = randomId()
           }
@@ -90,30 +104,39 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
           const { key, kind } = operation
 
           if (kind === 'teardown') {
-            console.log('TEARDOWN', key)
+            // console.log('TEARDOWN', key)
             const liveOp = liveQueryOperations.get(key)
             liveOp?.unsubscribeFromChanges?.()
             liveQueryOperations.delete(key)
           } else if (kind === 'query') {
+            // console.log('ADD QUERY', key)
             if (!liveQueryOperations.has(key)) {
-              console.log('ADD QUERY', key)
               liveQueryOperations.set(key, { operation })
             }
           }
         }),
+        share,
       )
 
-      function watchOperation(operation: Operation) {
+      function watchOperation(
+        operation: Operation,
+        visits: {
+          changeSubscriptions: ChangeSubscription<DatabaseSchema>[]
+          entities: { [key: string]: Set<string> }
+          queries: string[]
+        },
+      ) {
         const liveOp = liveQueryOperations.get(operation.key)
         if (!liveOp) {
           return
         }
 
         // Watch changes
-        const changeSubscriptions: ChangeSubscription<DatabaseSchema>[] =
-          operation.context.visits.changeSubscriptions
+        const changeSubscriptions: ChangeSubscription<DatabaseSchema>[] = [
+          ...visits.changeSubscriptions,
+        ]
 
-        const watchedQueryIds = operation.context.visits.queries as string[]
+        const watchedQueryIds = visits.queries as string[]
         if (watchedQueryIds.length) {
           changeSubscriptions.push({
             filter: {
@@ -131,7 +154,7 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
           })
         }
 
-        const watchedEntities = operation.context.visits.entities as {
+        const watchedEntities = visits.entities as {
           [key: string]: Set<string>
         }
         const refsByWatchedFields: Record<string, { refs: EntityRef[]; fields: string[] }> = {}
@@ -168,32 +191,55 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
         }
 
         // First, unsubscribe from previous watch
-        liveOp.unsubscribeFromChanges?.()
-
-        if (!changeSubscriptions.length) {
-          return
+        const prevUnsubscribe = liveOp.unsubscribeFromChanges
+        liveOp.unsubscribeFromChanges = undefined
+        liveOp.changeSubs = undefined
+        liveOp.visits = undefined
+        console.log('======= watch', changeSubscriptions, liveOp)
+        if (changeSubscriptions.length) {
+          // The create new sub
+          liveOp.changeSubs = changeSubscriptions
+          liveOp.visits = visits
+          liveOp.unsubscribeFromChanges = pipe(
+            merge(changeSubscriptions.map(sub => db.client.getChangeSubscriptionSource(sub))),
+            // tap(c =>
+            //   console.log(
+            //     '====++++++=====+++++++====++++==== CHANGE RECEIVED',
+            //     operation.key,
+            //     c.newRow?.updatedByOperationKey,
+            //     c,
+            //   ),
+            // ),
+            filter(change => {
+              return change.newRow?.updatedByOperationKey !== operation.key
+            }),
+            // onStart(() =>
+            //   console.log(
+            //     '====++++++=====+++++++====++++==== START LISTENING',
+            //     operation.key,
+            //     phash(stableStringify(changeSubscriptions)),
+            //   ),
+            // ),
+            // onEnd(() =>
+            //   console.log(
+            //     '====++++++=====+++++++====++++==== STOPPPPPP LISTENING',
+            //     operation.key,
+            //     phash(stableStringify(changeSubscriptions)),
+            //   ),
+            // ),
+            subscribe(() =>
+              input.client.reexecuteOperation(
+                makeOperation(operation.kind, operation, {
+                  ...operation.context,
+                  requestPolicy: 'cache-only',
+                }),
+              ),
+            ),
+          ).unsubscribe
         }
 
-        // The create new sub
-        liveOp.unsubscribeFromChanges = pipe(
-          merge(changeSubscriptions.map(sub => db.client.getChangeSubscriptionSource(sub))),
-          tap(c => console.log('====++++++=====+++++++====++++==== CHANGE RECEIVED', c)),
-          filter(change => change.newRow?.updatedByOperationKey !== operation.key),
-          onStart(() =>
-            console.log('====++++++=====+++++++====++++==== START LISTENING', operation.key),
-          ),
-          onEnd(() =>
-            console.log('====++++++=====+++++++====++++==== STOPPPPPP LISTENING', operation.key),
-          ),
-          subscribe(() =>
-            input.client.reexecuteOperation(
-              makeOperation(operation.kind, operation, {
-                ...operation.context,
-                requestPolicy: 'cache-only',
-              }),
-            ),
-          ),
-        ).unsubscribe
+        // Unsubscribe from previous sources
+        prevUnsubscribe?.()
       }
 
       const compiledByOperationKey = new Map<number, CompiledOperation>()
@@ -222,7 +268,6 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
           entities: { [key: string]: Set<string> }
           queries: string[]
         } = { entities: {}, queries: [], changeSubscriptions: [] }
-        operation.context.visits = visits
 
         const trackEntityVisit = (ref: string, fieldName: string) => {
           if (['__typename', 'id'].includes(fieldName)) {
@@ -296,7 +341,7 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
 
             if (!parent) {
               if (parentTypename === 'Query') {
-                ctx.operation.context.visits.queries.push(fieldName)
+                visits.queries.push(fieldName)
                 const query = await ctx.queryById.load(fieldName)
                 if (query) {
                   return query.data
@@ -314,6 +359,10 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
             return value
           },
         })
+
+        if (!errors?.length) {
+          watchOperation(operation, visits)
+        }
 
         return { data, errors }
       }
@@ -355,30 +404,83 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
 
       const localResults$ = pipe(
         operations$,
-        filter(op => op.kind === 'query' || op.kind === 'mutation'),
-        tap(op => console.time(`===== LOCAL RESOLUTION ${op.kind} ${op.key}`)),
+        filter(
+          op =>
+            (op.kind === 'query' || op.kind === 'mutation') &&
+            op.context.requestPolicy !== 'network-only',
+        ),
+        // tap(op => console.time(`===== LOCAL RESOLUTION ${op.kind} ${op.key}`)),
         executeExchange,
-        tap(r => {
-          console.timeEnd(`===== LOCAL RESOLUTION ${r.operation.kind} ${r.operation.key}`)
-          console.log('===== LOCAL HIT VISITS', r.operation.context.visits, r.error, r.data)
+        // tap(r => {
+        //   console.timeEnd(`===== LOCAL RESOLUTION ${r.operation.kind} ${r.operation.key}`)
+        //   console.log('===== LOCAL HIT VISITS', r.error, r.data)
+        // }),
+        tap(result => {
+          if (result.operation.context.requestPolicy === 'cache-and-network') {
+            result.stale = true
+          }
         }),
-      )
-
-      const localHits$ = pipe(
-        localResults$,
-        filter(r => !r.error),
-        tap(({ operation }) => watchOperation(operation)),
+        share,
       )
 
       const fetchResults$ = pipe(
-        operations$,
-        filter(op => op.context.requestPolicy !== 'cache-only'),
+        merge([
+          // Forward failed local results, if not cache only or cache-and-network
+          pipe(
+            localResults$,
+            filter(
+              r =>
+                !!r.error &&
+                r.operation.context.requestPolicy !== 'cache-only' &&
+                r.operation.context.requestPolicy !== 'cache-and-network',
+            ),
+            map(result => {
+              result.stale = true
+              return result.operation
+            }),
+          ),
+          // Forward teardowns and operations that should be fetched whatever the cache result
+          pipe(
+            operations$,
+            filter(
+              op =>
+                op.kind !== 'query' ||
+                op.context.requestPolicy === 'cache-and-network' ||
+                op.context.requestPolicy === 'network-only',
+            ),
+          ),
+        ]),
+        map(mapTypeNames),
         forward,
-        tap(persistOperationResult({ db })),
+        tap(async result => {
+          if (!result.error) {
+            await persistOperationResult({ db })(result)
+
+            if (
+              result.operation.kind === 'query' &&
+              !liveQueryOperations.get(result.operation.key)?.unsubscribeFromChanges
+            ) {
+              console.log('==== EXECUTE AFTER FETCH')
+              // This operation has no live change listener,
+              // so execute it against cache to trigger a DB watch.
+              // This can happen if the cache missed (no cache = no resolution = we don't know what to watch)
+              await executeOperation(result.operation).catch(error =>
+                console.error('Failed to re-execute operation after fetch', error),
+              )
+            }
+          }
+        }),
         filter(r => !r.error),
       )
 
-      return merge([fetchResults$, localHits$])
+      return merge([
+        fetchResults$,
+        // From cache
+        pipe(
+          localResults$,
+          filter(r => !r.error || r.operation.context.requestPolicy === 'cache-only'),
+        ),
+      ])
     }
   }
 }

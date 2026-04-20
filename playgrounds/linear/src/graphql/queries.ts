@@ -1,17 +1,21 @@
 import { gql } from 'urql'
 
+const WORKFLOW_STATE_MIN_FRAGMENT = gql`
+  fragment WorkflowStateMin on WorkflowState {
+    id
+    name
+    color
+  }
+`
+
 const ISSUE_ITEM_FRAGMENT = gql`
   fragment IssueItem on Issue {
-    __typename
     id
     identifier
     title
     priority
     state {
-      __typename
-      id
-      name
-      color
+      ...WorkflowStateMin
     }
     assignee {
       __typename
@@ -22,11 +26,12 @@ const ISSUE_ITEM_FRAGMENT = gql`
     createdAt
     updatedAt
   }
+
+  ${WORKFLOW_STATE_MIN_FRAGMENT}
 `
 
 const ISSUE_DETAIL_FRAGMENT = gql`
   fragment IssueDetail on Issue {
-    __typename
     id
     identifier
     title
@@ -35,37 +40,32 @@ const ISSUE_DETAIL_FRAGMENT = gql`
     estimate
     url
     state {
-      __typename
-      id
-      name
-      color
+      ...WorkflowStateMin
     }
     assignee {
-      __typename
       id
       name
       avatarUrl
     }
     labels {
       nodes {
-        __typename
         id
         name
         color
       }
     }
     project {
-      __typename
       id
       name
     }
     team {
-      __typename
       id
     }
     createdAt
     updatedAt
   }
+
+  ${WORKFLOW_STATE_MIN_FRAGMENT}
 `
 
 export const ISSUES_QUERY = gql`
@@ -84,7 +84,6 @@ export const PROJECTS_QUERY = gql`
   query Projects($first: Int) {
     projects(first: $first, orderBy: updatedAt) {
       nodes {
-        __typename
         id
         name
         description
@@ -94,13 +93,11 @@ export const PROJECTS_QUERY = gql`
         targetDate
         teams {
           nodes {
-            __typename
             id
             name
           }
         }
         lead {
-          __typename
           id
           name
           avatarUrl
@@ -126,18 +123,16 @@ export const WORKFLOW_STATES_QUERY = gql`
   query WorkflowStates($teamId: ID!) {
     workflowStates(filter: { team: { id: { eq: $teamId } } }) {
       nodes {
-        __typename
-        id
-        name
-        color
+        ...WorkflowStateMin
         type
         team {
-          __typename
           id
         }
       }
     }
   }
+
+  ${WORKFLOW_STATE_MIN_FRAGMENT}
 `
 
 export const UPDATE_ISSUE_STATE_MUTATION = gql`
@@ -145,16 +140,15 @@ export const UPDATE_ISSUE_STATE_MUTATION = gql`
     issueUpdate(id: $id, input: { stateId: $stateId }) {
       success
       issue {
-        __typename
         id
         state {
-          id
-          name
-          color
+          ...WorkflowStateMin
         }
       }
     }
   }
+
+  ${WORKFLOW_STATE_MIN_FRAGMENT}
 `
 
 export const UPDATE_ISSUE_PRIORITY_MUTATION = gql`
@@ -162,7 +156,6 @@ export const UPDATE_ISSUE_PRIORITY_MUTATION = gql`
     issueUpdate(id: $id, input: { priority: $priority }) {
       success
       issue {
-        __typename
         id
         priority
       }

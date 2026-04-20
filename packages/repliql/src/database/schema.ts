@@ -14,14 +14,14 @@ export type EntitiesTable = {
   __ref: ColumnType<EntityRef, EntityRef, never>
   data: ColumnType<Entity, string, string>
   updatedByOperationKey: number | null
-  createdAt: GeneratedAlways<Timestamp>
-  updatedAt: Timestamp
+  $createdAt: GeneratedAlways<Timestamp>
+  $updatedAt: Timestamp
 }
 
 export type QueriesTable = {
   id: string
   data: unknown
   updatedByOperationKey: number | null
-  createdAt: GeneratedAlways<Timestamp>
-  updatedAt: Timestamp
+  $createdAt: GeneratedAlways<Timestamp>
+  $updatedAt: Timestamp
 }

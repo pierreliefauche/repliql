@@ -46,13 +46,13 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       return
     }
 
-    const updatedAt = new Date().toISOString()
+    const $updatedAt = new Date().toISOString()
     const values = entities.map(data => ({
       __typename: data.__typename,
       id: data.id,
       __ref: getEntityRef(data),
       data: JSON.stringify(data),
-      updatedAt,
+      $updatedAt,
       updatedByOperationKey: byOperationKey,
     }))
 
@@ -63,7 +63,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
         oc.columns(['__typename', 'id']).doUpdateSet(eb => ({
           data: sql`json_patch(${eb.ref('entities.data')}, ${eb.ref('excluded.data')})`,
           updatedByOperationKey: eb.ref('excluded.updatedByOperationKey'),
-          updatedAt: eb.ref('excluded.updatedAt'),
+          $updatedAt: eb.ref('excluded.$updatedAt'),
         })),
       )
       .execute()
@@ -78,11 +78,11 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       return
     }
 
-    const updatedAt = new Date().toISOString()
+    const $updatedAt = new Date().toISOString()
     const values = queries.map(({ id, data }) => ({
       id,
       data: JSON.stringify(data),
-      updatedAt,
+      $updatedAt,
       updatedByOperationKey: byOperationKey,
     }))
 
@@ -93,7 +93,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
         oc.columns(['id']).doUpdateSet(eb => ({
           data: eb.ref('excluded.data'),
           updatedByOperationKey: eb.ref('excluded.updatedByOperationKey'),
-          updatedAt: eb.ref('excluded.updatedAt'),
+          $updatedAt: eb.ref('excluded.$updatedAt'),
         })),
       )
       .execute()
