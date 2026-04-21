@@ -200,9 +200,14 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
     }
   }
 
-  private async watchAllTables() {
+  public async getAllTables() {
     const schema = await this.getDbSchema()
-    return Promise.all((Object.keys(schema) as AnyTable<DB>[]).map(table => this.watchTable(table)))
+    return Object.keys(schema) as AnyTable<DB>[]
+  }
+
+  private async watchAllTables() {
+    const tables = await this.getAllTables()
+    return Promise.all(tables.map(table => this.watchTable(table)))
   }
 
   private getAllRowUpdateSource(): Source<RowUpdate<DB>> {
@@ -215,7 +220,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
     })
   }
 
-  private getTableRowUpdateSource<T extends AnyTable<DB>>(table: T): Source<RowUpdate<DB, T>> {
+  public getTableRowUpdateSource<T extends AnyTable<DB>>(table: T): Source<RowUpdate<DB, T>> {
     return this.tableRowUpdatesSources.getOrCreate(table, () => {
       return pipe(
         this.rowUpdatesSubject.source,

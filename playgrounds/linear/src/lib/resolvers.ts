@@ -47,7 +47,7 @@ export const resolvers: Resolvers = {
       })
 
       if (!states.length) {
-        throw new Error('not fetched')
+        ctx.markAsStale()
       }
 
       return { nodes: states }
@@ -72,7 +72,8 @@ export const resolvers: Resolvers = {
           },
         ],
       })
-      return pointsTo('Issue', issueId)
+
+      return { success: true, issue: pointsTo('Issue', issueId) }
     },
   },
 }
