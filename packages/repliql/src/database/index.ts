@@ -1,4 +1,5 @@
 import type { ReactiveKysely } from '@repliql/reactive-kysely'
+import { toJsonbPreserveNulls } from '@repliql/reactive-kysely'
 import { Entity, EntityRef, getEntityRef, isPrimitive, Primitive } from '@repliql/utils'
 import { type MigrationResultSet, Migrator, sql } from 'kysely'
 
@@ -51,7 +52,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       __typename: data.__typename,
       id: data.id,
       __ref: getEntityRef(data),
-      data: JSON.stringify(data),
+      data: toJsonbPreserveNulls(data),
       $updatedAt,
       updatedByOperationKey: byOperationKey,
     }))
@@ -81,7 +82,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
     const $updatedAt = new Date().toISOString()
     const values = queries.map(({ id, data }) => ({
       id,
-      data: JSON.stringify(data),
+      data: toJsonbPreserveNulls(data),
       $updatedAt,
       updatedByOperationKey: byOperationKey,
     }))

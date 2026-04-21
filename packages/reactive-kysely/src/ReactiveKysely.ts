@@ -20,6 +20,7 @@ import {
 import { type ChangeSubscription, changeSubscriptionTables } from './ChangeSubscription'
 import { DEFAULT_QUERY_UPDATE_DEBOUNCE_MS } from './constants'
 import { compileChangeSubscription, isChangeSubscriptionUpdate } from './isChangeSubscriptionUpdate'
+import { PreserveJsonNullsPlugin } from './PreserveJsonNullsPlugin'
 import { queryToChangeSubscription } from './queryToChangeSubscription'
 import { AnyTable, Row, RowUpdate } from './types'
 
@@ -66,6 +67,9 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
     if (!plugins.some(plugin => plugin instanceof ParseJSONResultsPlugin)) {
       plugins.push(new ParseJSONResultsPlugin())
     }
+
+    // And add the preserved `null` parser
+    plugins.push(new PreserveJsonNullsPlugin())
 
     super({
       ...config,
