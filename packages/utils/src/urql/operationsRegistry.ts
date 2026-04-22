@@ -1,8 +1,9 @@
 import { Operation } from '@urql/core'
 
 export interface OperationsRegistry<T> {
-  spy: (operation: Operation) => Operation
+  spy: (operation: Operation) => void
   get: (operationKey: number) => undefined | T
+  entries: () => [number, T][]
   setIfPresent: (operationKey: number, value: T) => void
 }
 
@@ -28,27 +29,9 @@ export function makeOperationsRegistry<T>(
   const evictionTimers = new Map<number, ReturnType<typeof setTimeout>>()
   const lruQueue = new Set<number>()
 
-  function pushLru(key: number) {
-    if (eviction.strategy === 'lru') {
-      lruQueue.delete(key)
-      lruQueue.add(key)
-    }
-  }
-
-  function trimLru() {
-    if (eviction.strategy === 'lru') {
-      let extraCount = lruQueue.size - eviction.size
-      if (extraCount > 0) {
-        const iterable = lruQueue.values()
-        while (extraCount--) {
-          const oldest = iterable.next().value!
-          evict(oldest)
-        }
-      }
-    }
-  }
-
   function evict(operationKey: number) {
+    lruQueue.delete(operationKey)
+
     if (!evictableKeys.has(operationKey)) {
       return
     }
@@ -56,7 +39,6 @@ export function makeOperationsRegistry<T>(
     const value = registry.get(operationKey) as T
     registry.delete(operationKey)
     evictableKeys.delete(operationKey)
-    lruQueue.delete(operationKey)
 
     onEvict?.(operationKey, value)
   }
@@ -83,7 +65,7 @@ export function makeOperationsRegistry<T>(
     }
   }
 
-  function spy(operation: Operation): Operation {
+  function spy(operation: Operation): void {
     const { key, kind } = operation
 
     if (kind === 'teardown') {
@@ -94,21 +76,28 @@ export function makeOperationsRegistry<T>(
       }
 
       evictableKeys.delete(key)
-      lruQueue.delete(key)
       clearTimeout(evictionTimers.get(key))
       evictionTimers.delete(key)
 
-      pushLru(key)
-      trimLru()
-    }
+      if (eviction.strategy === 'lru') {
+        lruQueue.delete(key)
+        lruQueue.add(key)
 
-    return operation
+        while (lruQueue.size > eviction.size) {
+          const oldest = lruQueue.values().next().value!
+          evict(oldest)
+        }
+      }
+    }
   }
 
   return {
     spy,
     get(operationKey: number) {
       return registry.get(operationKey)
+    },
+    entries() {
+      return [...registry.entries()].filter(([key]) => !evictableKeys.has(key))
     },
     setIfPresent(operationKey: number, value: T) {
       if (registry.has(operationKey)) {

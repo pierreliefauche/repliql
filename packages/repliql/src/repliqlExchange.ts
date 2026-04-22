@@ -23,6 +23,7 @@ import {
   compile,
   CompiledOperation,
   mapTypeNames,
+  makeOperationsRegistry,
 } from '@repliql/utils'
 import {
   type Operation,
@@ -80,13 +81,17 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
       const db = new Database({ kysely })
       void db.migrate()
 
-      const liveQueryOperations = new Map<
-        number,
-        {
-          operation: Operation
-          changeSubs: CompiledChangeSubscription[]
-        }
-      >()
+      const liveQueryOperations = makeOperationsRegistry<{
+        operation: Operation
+        changeSubs: CompiledChangeSubscription[]
+      }>({
+        kinds: ['query'],
+        eviction: {
+          strategy: 'delayed',
+          delayMs: 60_000,
+        },
+        onAdd: operation => ({ operation, changeSubs: [] }),
+      })
 
       const rowUpdateSubscriptionByTable = new Map<AnyTable<DatabaseSchema>, Subscription>()
 
@@ -168,18 +173,7 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
           return op
         }),
         // Keep track of live query operations
-        tap(operation => {
-          const { key, kind } = operation
-
-          if (kind === 'teardown') {
-            liveQueryOperations.delete(key)
-          } else if (kind === 'query') {
-            // console.log('ADD QUERY', key)
-            if (!liveQueryOperations.has(key)) {
-              liveQueryOperations.set(key, { operation, changeSubs: [] })
-            }
-          }
-        }),
+        tap(liveQueryOperations.spy),
         share,
       )
 
