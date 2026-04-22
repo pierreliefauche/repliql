@@ -1,4 +1,5 @@
 import { CircleIcon, KanbanIcon, SignOutIcon } from '@phosphor-icons/react'
+import { useMemo } from 'react'
 import { Link, useLocation } from 'wouter'
 
 import { Button } from '@/components/ui/button'
@@ -16,10 +17,7 @@ import {
 } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
 
-const navItems = [
-  { title: 'Issues', url: '/issues', icon: CircleIcon },
-  { title: 'Projects', url: '/projects', icon: KanbanIcon },
-]
+import { useLiveSelect } from '../lib/kysely'
 
 interface AppSidebarProps {
   onLogout: () => void
@@ -29,6 +27,28 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
   const { state } = useSidebar()
   const [currentPath] = useLocation()
   const collapsed = state === 'collapsed'
+
+  const result = useLiveSelect(db => {
+    return db
+      .selectFrom('entities')
+      .where('__typename', '=', 'Issue')
+      .where(eb => eb.ref('data', '->>').key('priority'), '=', 1 /* URGENT */)
+      .select(eb => eb.fn.countAll().as('count'))
+  })
+
+  const urgentIssuesCount = result?.[0].count
+
+  const navItems = useMemo(
+    () => [
+      {
+        title: `Issues${urgentIssuesCount ? ` - ${urgentIssuesCount} urgent!` : ''}`,
+        url: '/issues',
+        icon: CircleIcon,
+      },
+      { title: 'Projects', url: '/projects', icon: KanbanIcon },
+    ],
+    [urgentIssuesCount],
+  )
 
   return (
     <Sidebar collapsible="icon">

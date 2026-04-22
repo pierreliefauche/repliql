@@ -18,12 +18,19 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.mjs",
+      "require": "./dist/react/index.cjs"
     }
   },
   "scripts": {
-    "build": "bun run build:ts && bun run build:esm && bun run build:cjs && bun run build:types",
+    "build": "bun run build:ts && bun run build:esm && bun run build:cjs && bun run build:react:esm && bun run build:react:cjs && bun run build:types",
     "build:cjs": "bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify",
     "build:esm": "bun build ./src/index.ts --outfile ./dist/index.mjs --format esm --minify",
+    "build:react:cjs": "bun build ./src/react/index.ts --outfile ./dist/react/index.cjs --format cjs --minify --external react --external wonka --external @repliql/utils",
+    "build:react:esm": "bun build ./src/react/index.ts --outfile ./dist/react/index.mjs --format esm --minify --external react --external wonka --external @repliql/utils",
     "build:ts": "bun build ./src/index.ts --outdir ./dist --format esm --minify",
     "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap",
     "dev": "bun build ./src/index.ts --watch --outdir ./dist --format esm",
@@ -37,9 +44,17 @@
     "wonka": "catalog:"
   },
   "devDependencies": {
-    "node-sqlite3-wasm": "^0.8.56"
+    "@types/react": "^19.2.14",
+    "node-sqlite3-wasm": "^0.8.56",
+    "react": "^19.2.4"
   },
   "peerDependencies": {
-    "kysely": "catalog:"
+    "kysely": "catalog:",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }

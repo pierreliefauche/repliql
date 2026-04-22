@@ -1,3 +1,4 @@
+import { ReactiveKyselyProvider } from '@repliql/reactive-kysely/react'
 import { useState, useMemo } from 'react'
 import { Provider as UrqlProvider } from 'urql'
 import { Route, Switch, Redirect } from 'wouter'
@@ -9,6 +10,8 @@ import { TokenScreen } from '@/components/TokenScreen'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createLinearClient, getApiToken, setApiToken, clearApiToken } from '@/lib/urql'
+
+import { kysely } from './lib/kysely'
 
 const App = () => {
   const [token, setToken] = useState<string | null>(getApiToken)
@@ -38,19 +41,21 @@ const App = () => {
   }
 
   return (
-    <UrqlProvider value={client}>
-      <TooltipProvider>
-        <Sonner />
-        <AppLayout onLogout={handleLogout}>
-          <Switch>
-            <Route path="/issues" component={IssuesView} nest />
-            <Route path="/projects" component={ProjectsView} nest />
-            <Route path="/" component={() => <Redirect to="/issues" />} />
-            <Route component={() => <Redirect to="/" />} />
-          </Switch>
-        </AppLayout>
-      </TooltipProvider>
-    </UrqlProvider>
+    <ReactiveKyselyProvider value={kysely}>
+      <UrqlProvider value={client}>
+        <TooltipProvider>
+          <Sonner />
+          <AppLayout onLogout={handleLogout}>
+            <Switch>
+              <Route path="/issues" component={IssuesView} nest />
+              <Route path="/projects" component={ProjectsView} nest />
+              <Route path="/" component={() => <Redirect to="/issues" />} />
+              <Route component={() => <Redirect to="/" />} />
+            </Switch>
+          </AppLayout>
+        </TooltipProvider>
+      </UrqlProvider>
+    </ReactiveKyselyProvider>
   )
 }
 
