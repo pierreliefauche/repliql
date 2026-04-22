@@ -6,7 +6,7 @@ import type {
   UnknownRow,
 } from 'kysely'
 
-const NULL = '$null$' as const
+const JSON_NULL = '$null$' as const
 
 export class PreserveJsonNullsPlugin implements KyselyPlugin {
   // noop
@@ -17,7 +17,7 @@ export class PreserveJsonNullsPlugin implements KyselyPlugin {
   async transformResult(args: PluginTransformResultArgs) {
     return {
       ...args.result,
-      rows: transform(args.result.rows, NULL, null) as UnknownRow[],
+      rows: transform(args.result.rows, JSON_NULL, null) as UnknownRow[],
     }
   }
 }
@@ -27,7 +27,7 @@ export function toJsonbPreserveNulls(input: unknown): string {
 }
 
 export function preserveJsonNulls<I>(input: I): I {
-  return transform(input, null, NULL) as I
+  return transform(input, null, JSON_NULL) as I
 }
 
 function transform<From, To>(obj: unknown, from: From, to: To): unknown {
