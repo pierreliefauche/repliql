@@ -87,8 +87,7 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
       }>({
         kinds: ['query'],
         eviction: {
-          strategy: 'delayed',
-          delayMs: 60_000,
+          strategy: 'immediate',
         },
         onAdd: operation => ({ operation, changeSubs: [] }),
       })
