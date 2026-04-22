@@ -19,3 +19,7 @@ export type {
   ExecutionResult,
   CompiledOperation,
 } from './graphql/execute'
+
+// URQL
+
+export { mapTypeNames } from './urql/mapTypeNames'

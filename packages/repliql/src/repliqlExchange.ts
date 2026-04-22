@@ -22,6 +22,7 @@ import {
   FieldResolver,
   compile,
   CompiledOperation,
+  mapTypeNames,
 } from '@repliql/utils'
 import {
   type Operation,
@@ -31,7 +32,6 @@ import {
   OperationResult,
   makeResult,
   makeErrorResult,
-  formatDocument,
 } from '@urql/core'
 import DataLoader from 'dataloader'
 import {
@@ -72,18 +72,6 @@ export type Resolvers = Record<
 type RepliqlExchangeConfig = {
   kysely: ReactiveKysely<DatabaseSchema>
   resolvers: Resolvers
-}
-
-/** Adds unique typenames to query (for invalidating cache entries) */
-export const mapTypeNames = (operation: Operation): Operation => {
-  const query = formatDocument(operation.query)
-  if (query !== operation.query) {
-    const formattedOperation = makeOperation(operation.kind, operation)
-    formattedOperation.query = query
-    return formattedOperation
-  } else {
-    return operation
-  }
 }
 
 export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): Exchange {
