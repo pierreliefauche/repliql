@@ -162,7 +162,6 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
         _operations$,
         // Add an operation id to all operations
         map(op => {
-          mapTypeNames
           if (!op.context.operationId) {
             op.context.operationId = randomId()
           }

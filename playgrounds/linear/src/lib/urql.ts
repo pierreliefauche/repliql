@@ -1,3 +1,4 @@
+import { fastCacheExchange } from '@repliql/repliql'
 import { createClient, fetchExchange } from 'urql'
 
 import { repliql } from './repliql'
@@ -26,7 +27,16 @@ export function clearApiToken() {
 export function createLinearClient(token: string) {
   return createClient({
     url: LINEAR_API_URL,
-    exchanges: [repliql, fetchExchange],
+    exchanges: [
+      fastCacheExchange({
+        eviction: {
+          strategy: 'lru',
+          size: 100,
+        },
+      }),
+      repliql,
+      fetchExchange,
+    ],
     preferGetMethod: false,
     fetchOptions: () => ({
       headers: {
