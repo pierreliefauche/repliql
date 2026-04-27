@@ -61,19 +61,14 @@ export const resolvers: Resolvers = {
     ) => {
       const { id: issueId, input } = args
 
-      await ctx.db.upsertEntities({
-        byOperationKey: ctx.operation.key,
-        entities: [
-          {
-            __typename: 'Issue',
-            id: issueId,
-            priority: input.priority,
-            state: input.stateId ? pointsTo('WorkflowState', input.stateId) : undefined,
-          },
-        ],
+      const issue = await ctx.patchEntity({
+        __typename: 'Issue',
+        id: issueId,
+        priority: input.priority,
+        state: input.stateId ? pointsTo('WorkflowState', input.stateId) : undefined,
       })
 
-      return { success: true, issue: pointsTo('Issue', issueId) }
+      return { success: true, issue }
     },
   },
 }
