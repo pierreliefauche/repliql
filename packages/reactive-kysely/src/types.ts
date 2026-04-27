@@ -5,6 +5,7 @@ export type Row<DB, Table extends AnyTable<DB>> = Record<keyof DB[Table], unknow
 export type RowUpdate<DB = any, T extends AnyTable<DB> = AnyTable<DB>> = {
   [Table in AnyTable<DB>]: {
     table: Table
+    rowId: number
     oldRow: Row<DB, Table> | null
     newRow: Row<DB, Table> | null
   }

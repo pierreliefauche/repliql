@@ -26,7 +26,7 @@ import { AnyTable, Row, RowUpdate } from './types'
 
 type CreateCallbackFunction = (
   callbackName: string,
-  callback: (oldJson: string | null, newJson: string | null) => void,
+  callback: (rowid: number, oldJson: string | null, newJson: string | null) => void,
 ) => void | Promise<void>
 
 export type ReactiveKyselyConfig = KyselyConfig & {
@@ -145,7 +145,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
 
         // The callback receives: (oldRowJson, newRowJson)
         // We cast to () => void since the type is simplified, but SQLite passes args
-        const callback = (oldJson: string | null, newJson: string | null) => {
+        const callback = (rowId: number, oldJson: string | null, newJson: string | null) => {
           const oldRow = oldJson ? (JSON.parse(oldJson) as Row<DB, Table>) : null
           const newRow = newJson ? (JSON.parse(newJson) as Row<DB, Table>) : null
 
@@ -153,6 +153,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
 
           this.rowUpdatesSubject.next({
             table,
+            rowId,
             oldRow,
             newRow,
           })
@@ -171,7 +172,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
             `CREATE TRIGGER IF NOT EXISTS repliql_insert_${table}
               AFTER INSERT ON "${table}"
               BEGIN
-                SELECT ${fnName}(NULL, ${toJson('NEW')});
+                SELECT ${fnName}(NEW.rowid, NULL, ${toJson('NEW')});
               END;`,
           )
           .execute(this)
@@ -182,7 +183,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
             `CREATE TRIGGER IF NOT EXISTS repliql_update_${table}
               AFTER UPDATE ON "${table}"
               BEGIN
-                SELECT ${fnName}(${toJson('OLD')}, ${toJson('NEW')});
+                SELECT ${fnName}(NEW.rowid, ${toJson('OLD')}, ${toJson('NEW')});
               END;`,
           )
           .execute(this)
@@ -193,7 +194,7 @@ export class ReactiveKysely<DB = any> extends Kysely<DB> {
             `CREATE TRIGGER IF NOT EXISTS repliql_delete_${table}
               AFTER DELETE ON "${table}"
               BEGIN
-                SELECT ${fnName}(${toJson('OLD')}, NULL);
+                SELECT ${fnName}(OLD.rowid, ${toJson('OLD')}, NULL);
               END;`,
           )
           .execute(this)
