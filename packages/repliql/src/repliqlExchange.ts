@@ -33,6 +33,8 @@ import {
   OperationResult,
   makeResult,
   makeErrorResult,
+  getOperationName,
+  stringifyDocument,
 } from '@urql/core'
 import DataLoader from 'dataloader'
 import {
@@ -50,25 +52,31 @@ import {
 } from 'wonka'
 
 import { Database } from './database'
-import type { DatabaseSchema } from './database/schema'
+import { type DatabaseSchema } from './database/schema'
 import { persistOperationResult } from './persistOperationResult'
 
-type ResolverContext = {
+type BaseResolverContext = {
   operation: Operation
-  db: Database
   queryById: DataLoader<string, { id: string; data: unknown } | undefined>
   entityByRef: DataLoader<string, Entity | undefined>
   filterEntityPointers: (
     args: Parameters<Database['selectEntityPointersQuery']>[0],
   ) => Promise<EntityPointer[]>
-  trackEntityVisit: (ref: string, fieldName: string) => void
+}
+
+type FieldResolverContext = BaseResolverContext & {
   markAsStale: () => void
 }
 
-export type Resolvers = Record<
-  'Query' | 'Mutation' | (string & {}),
-  Record<string, FieldResolver<ResolverContext>>
->
+type MutationResolverContext = BaseResolverContext & {
+  patchEntity: (entity: Entity) => Promise<Entity>
+}
+
+export type Resolvers = {
+  [K in 'Query' | 'Mutation' | (string & {})]: K extends 'Mutation'
+    ? Record<string, FieldResolver<MutationResolverContext>>
+    : Record<string, FieldResolver<FieldResolverContext>>
+}
 
 type RepliqlExchangeConfig = {
   kysely: ReactiveKysely<DatabaseSchema>
@@ -113,6 +121,8 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
             }
 
             const isStale =
+              rowUpdate.newRow &&
+              'updatedByOperationKey' in rowUpdate.newRow &&
               rowUpdate.newRow?.updatedByOperationKey !== opKey &&
               changeSubs.some(changeSub => isChangeSubscriptionUpdate(changeSub, rowUpdate))
 
@@ -271,6 +281,17 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
       const compiledByOperationKey = new Map<number, CompiledOperation>()
 
       async function executeOperation(operation: Operation) {
+        const mutation =
+          operation.kind === 'mutation'
+            ? await db.insertMutation({
+                id: operation.context.operationId,
+                name: getOperationName(operation.query) || null,
+                query: stringifyDocument(operation.query),
+                params: operation.variables || {},
+                status: 'pending',
+              })
+            : undefined
+
         const queryById = new DataLoader<string, { id: string; data: unknown } | undefined>(
           async queryIds => {
             console.time('=== LOAD QUERY ' + queryIds.join(', '))
@@ -305,7 +326,7 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
           visits.entities[ref].add(fieldName)
         }
 
-        const filterEntityPointers: ResolverContext['filterEntityPointers'] = async args => {
+        const filterEntityPointers: BaseResolverContext['filterEntityPointers'] = async args => {
           const query = db.selectEntityPointersQuery(args)
 
           const changeSub = queryToChangeSubscription(query)
@@ -316,9 +337,35 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
           return query.execute()
         }
 
+        const patchEntity: MutationResolverContext['patchEntity'] = async entity => {
+          const entities = await db.patchEntities({
+            mutationId: mutation!.id,
+            byOperationKey: operation.key,
+            entities: [entity],
+          })
+
+          return entities?.[0] || entity
+        }
+
         let isStale = false
         const markAsStale = () => {
           isStale = true
+        }
+
+        const fieldResolverContext: FieldResolverContext = {
+          markAsStale,
+          operation,
+          filterEntityPointers,
+          entityByRef,
+          queryById,
+        }
+
+        const mutationResolverContext: MutationResolverContext = {
+          operation,
+          filterEntityPointers,
+          entityByRef,
+          queryById,
+          patchEntity,
         }
 
         // Filter undefined values from variables before calling execute()
@@ -336,45 +383,44 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
           compiledByOperationKey.set(operation.key, compile(operation.query))
         }
 
-        const { data, errors } = await execute<ResolverContext>({
+        const { data, errors } = await execute<void>({
           compiled: compiledByOperationKey.get(operation.key)!,
           variableValues,
-          context: {
-            operation,
-            db,
-            queryById,
-            entityByRef,
-            trackEntityVisit,
-            filterEntityPointers,
-            markAsStale,
-          },
-          fieldResolver: async (parent, args, ctx: ResolverContext, info) => {
+          context: undefined,
+          fieldResolver: async (parent, args, _ctx, info) => {
             const fieldName = getFullFieldName({ name: info.fieldName, args })
 
             if (isEntityHandle(parent)) {
               const ref = getEntityRef(parent)
-              ctx.trackEntityVisit(ref, fieldName)
-              const parentEntity = await ctx.entityByRef.load(ref)
+              trackEntityVisit(ref, fieldName)
+              const parentEntity = await entityByRef.load(ref)
               if (parentEntity) {
                 parent = parentEntity
               }
             }
 
-            const parentTypename = parent
+            const parentType: keyof Resolvers = parent
               ? parent.__typename
               : info.rootOperation === 'query'
                 ? 'Query'
                 : 'Mutation'
 
-            const resolver = resolvers[parentTypename]?.[info.fieldName]
-            if (resolver) {
-              return resolver(parent, args, ctx, info)
+            if (parentType === 'Mutation') {
+              const resolver = resolvers.Mutation?.[info.fieldName]
+              if (resolver) {
+                return resolver(parent, args, mutationResolverContext, info)
+              }
+            } else {
+              const resolver = resolvers[parentType]?.[info.fieldName]
+              if (resolver) {
+                return resolver(parent, args, fieldResolverContext, info)
+              }
             }
 
             if (!parent) {
-              if (parentTypename === 'Query') {
+              if (parentType === 'Query') {
                 visits.queries.push(fieldName)
-                const query = await ctx.queryById.load(fieldName)
+                const query = await queryById.load(fieldName)
                 if (query) {
                   return query.data
                 }
@@ -397,8 +443,12 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
           },
         })
 
-        if (!errors?.length) {
-          watchOperation(operation, visits)
+        if (operation.kind === 'mutation') {
+          // Something to do?
+        } else {
+          if (!errors?.length) {
+            watchOperation(operation, visits)
+          }
         }
 
         return { data, errors, isStale }

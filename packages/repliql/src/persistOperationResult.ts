@@ -44,7 +44,11 @@ export function persistOperationResult({ db }: PersistOperationResultConfig) {
 
     const byOperationKey = operationResult.operation.key
 
-    await db.upsertEntities({ entities: Object.values(entities), byOperationKey })
+    await db.upsertEntities({
+      entities: Object.values(entities),
+      byOperationKey,
+      isOptimistic: false,
+    })
 
     if (operationResult.operation.kind === 'query') {
       await db.upsertQueries({
@@ -53,6 +57,11 @@ export function persistOperationResult({ db }: PersistOperationResultConfig) {
           id,
           data,
         })),
+      })
+    } else if (operationResult.operation.kind === 'mutation') {
+      await db.resolveMutation({
+        mutationId: operationResult.operation.context.operationId,
+        status: 'applied',
       })
     }
   }
