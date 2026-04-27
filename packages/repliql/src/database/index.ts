@@ -3,7 +3,12 @@ import { toJsonbPreserveNulls } from '@repliql/reactive-kysely'
 import { Entity, EntityRef, getEntityRef, isPrimitive, Primitive } from '@repliql/utils'
 import { type MigrationResultSet, Migrator, sql } from 'kysely'
 
-import type { DatabaseSchema } from './schema'
+import {
+  ACTIVE_MUTATION_STATUSES,
+  type DatabaseSchema,
+  type MutationStatus,
+  type ResolvedMutationStatus,
+} from './schema'
 
 type DatabaseConfig<DB extends DatabaseSchema = DatabaseSchema> = {
   kysely: ReactiveKysely<DB>
@@ -41,8 +46,12 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
     return this.kysely as unknown as ReactiveKysely<DatabaseSchema>
   }
 
-  public async upsertEntities(args: { entities: Entity[]; byOperationKey: number }) {
-    const { entities, byOperationKey } = args
+  public async upsertEntities(args: {
+    entities: Entity[]
+    byOperationKey: number
+    isOptimistic: boolean
+  }) {
+    const { entities, byOperationKey, isOptimistic } = args
     if (entities.length === 0) {
       return
     }
@@ -53,21 +62,36 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       id: data.id,
       __ref: getEntityRef(data),
       data: toJsonbPreserveNulls(data),
+      base: isOptimistic ? toJsonbPreserveNulls({}) : null,
       $updatedAt,
       updatedByOperationKey: byOperationKey,
     }))
 
-    await this.client
+    const q = this.client
       .insertInto('entities')
       .values(values)
       .onConflict(oc =>
         oc.columns(['__typename', 'id']).doUpdateSet(eb => ({
-          data: sql`json_patch(${eb.ref('entities.data')}, ${eb.ref('excluded.data')})`,
+          ...(isOptimistic
+            ? {
+                // Make sure base is populated
+                base: eb.fn.coalesce(eb.ref('entities.base'), eb.ref('entities.data')),
+                // Patch data
+                data: sql`json_patch(${eb.ref('entities.data')}, ${eb.ref('excluded.data')})`,
+              }
+            : {
+                // Patch base if base exists
+                base: sql`IIF(${eb.ref('entities.base')} IS NOT NULL, json_patch(${eb.ref('entities.base')}, ${eb.ref('excluded.data')}), NULL)`,
+                // otherwise patch data if base does not exist
+                data: sql`IIF(${eb.ref('entities.base')} IS NULL, json_patch(${eb.ref('entities.data')}, ${eb.ref('excluded.data')}), ${eb.ref('entities.data')})`,
+              }),
           updatedByOperationKey: eb.ref('excluded.updatedByOperationKey'),
           $updatedAt: eb.ref('excluded.$updatedAt'),
         })),
       )
-      .execute()
+      .returningAll()
+
+    return q.execute()
   }
 
   public async upsertQueries(args: {
@@ -198,6 +222,103 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
     }
 
     return query
+  }
+
+  public async insertMutation(args: {
+    id: string
+    name: string | null
+    query: string
+    params: Record<string, unknown>
+    status: MutationStatus
+  }) {
+    const { id, name, query, params, status } = args
+
+    const mutation = await this.client
+      .insertInto('mutations')
+      .values([
+        {
+          id,
+          name,
+          query,
+          params: toJsonbPreserveNulls(params),
+          status,
+          $updatedAt: new Date().toISOString(),
+        },
+      ])
+      .returningAll()
+      .executeTakeFirst()
+
+    return mutation
+  }
+
+  public async patchEntities(args: {
+    mutationId: string
+    byOperationKey: number
+    entities: Entity[]
+  }) {
+    const { mutationId, entities, byOperationKey } = args
+
+    // Record mutation patch
+    const $updatedAt = new Date().toISOString()
+    await this.client
+      .insertInto('mutationPatches')
+      .values(
+        entities.map(({ __typename, id, ...patch }) => ({
+          mutationId,
+          entityRef: getEntityRef({ __typename, id }),
+          patch: toJsonbPreserveNulls(patch),
+          $updatedAt,
+        })),
+      )
+      .onConflict(oc =>
+        oc.columns(['mutationId', 'entityRef']).doUpdateSet(eb => ({
+          patch: eb.ref('excluded.patch'),
+          $updatedAt: eb.ref('excluded.$updatedAt'),
+        })),
+      )
+      .execute()
+
+    // Patch entities
+    return await this.upsertEntities({
+      byOperationKey,
+      isOptimistic: true,
+      entities,
+    })
+  }
+
+  async resolveMutation(args: { mutationId: string; status: ResolvedMutationStatus }) {
+    const { mutationId, status } = args
+
+    const [mutation] = await Promise.all([
+      this.client
+        .updateTable('mutations')
+        .set('$updatedAt', new Date().toISOString())
+        .set('status', status)
+        .where('id', '=', mutationId)
+        .returningAll()
+        .executeTakeFirst(),
+      this.client
+        .updateTable('entities')
+        // @ts-ignore
+        .set('data', eb => eb.ref('base'))
+        .set('base', null)
+        .set('$updatedAt', new Date().toISOString())
+        .where('base', 'is not', null)
+        .where('__ref', 'in', eb =>
+          eb.selectFrom('mutationPatches').select('entityRef').where('mutationId', '=', mutationId),
+        )
+        .where('__ref', 'not in', eb =>
+          eb
+            .selectFrom('mutationPatches')
+            .select('entityRef')
+            .innerJoin('mutations', 'mutations.id', 'mutationPatches.mutationId')
+            .where('status', 'in', ACTIVE_MUTATION_STATUSES)
+            .where('mutationId', '<>', mutationId),
+        )
+        .execute(),
+    ])
+
+    return mutation
   }
 }
 
