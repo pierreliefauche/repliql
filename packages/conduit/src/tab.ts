@@ -5,6 +5,8 @@ import { transfer, wrap } from 'comlink'
 import { heartbeat as defaultHeartbeat, type Heartbeat } from './heartbeat'
 import { type BrokerApi, SDW_DEDICATED_PORT } from './protocol'
 
+export type { Remote }
+
 /**
  * The shared-side bundles `{ user, broker }` over a single Comlink endpoint, with `broker`
  * marked via `Comlink.proxy()` so it chains through. Comlink's generic `Remote<T>`
@@ -16,13 +18,13 @@ interface CombinedRemote {
   broker: Remote<BrokerApi>
 }
 
-export interface CreateSharedDedicatedWorkerConfig {
+export interface CreateConduitConfig {
   dedicated: Worker
   shared: SharedWorker
   heartbeat?: Heartbeat
 }
 
-export interface SharedDedicatedWorkerHandle {
+export interface ConduitHandle {
   tabId: string
   consumeFromSharedWorker<T>(): Remote<T>
   dispose(): Promise<void>
@@ -38,9 +40,7 @@ export interface SharedDedicatedWorkerHandle {
  *
  * The tab itself doesn't decide whether it's leader — the shared worker does.
  */
-export function createSharedDedicatedWorker(
-  config: CreateSharedDedicatedWorkerConfig,
-): SharedDedicatedWorkerHandle {
+export function createConduit(config: CreateConduitConfig): ConduitHandle {
   const { dedicated, shared, heartbeat = defaultHeartbeat } = config
   const tabId = randomId()
   const wrapped = wrap(shared.port) as unknown as CombinedRemote

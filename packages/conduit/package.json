@@ -46,7 +46,7 @@
     "test:watch": "bun test ./src/**/*.test.ts ./src/*.test.ts --watch"
   },
   "dependencies": {
-    "comlink": "^4.4.2"
+    "comlink": "catalog:"
   },
   "devDependencies": {
     "@repliql/utils": "workspace:*",

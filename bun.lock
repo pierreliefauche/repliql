@@ -14,6 +14,17 @@
         "typescript": "catalog:",
       },
     },
+    "packages/conduit": {
+      "name": "@repliql/conduit",
+      "version": "0.0.1",
+      "dependencies": {
+        "comlink": "catalog:",
+      },
+      "devDependencies": {
+        "@repliql/utils": "workspace:*",
+        "typescript": "catalog:",
+      },
+    },
     "packages/reactive-kysely": {
       "name": "@repliql/reactive-kysely",
       "version": "0.0.1",
@@ -45,17 +56,6 @@
         "dataloader": "^2.2.3",
         "kysely": "catalog:",
         "wonka": "catalog:",
-      },
-    },
-    "packages/shared-dedicated-worker": {
-      "name": "@repliql/shared-dedicated-worker",
-      "version": "0.0.1",
-      "dependencies": {
-        "comlink": "^4.4.2",
-      },
-      "devDependencies": {
-        "@repliql/utils": "workspace:*",
-        "typescript": "catalog:",
       },
     },
     "packages/shared-exchange": {
@@ -96,6 +96,7 @@
         "@fontsource-variable/geist": "^5.2.8",
         "@magieno/sqlite-client": "^3.45.1-build5-with-extension-support",
         "@phosphor-icons/react": "^2.1.10",
+        "@repliql/conduit": "workspace:*",
         "@repliql/reactive-kysely": "workspace:*",
         "@repliql/repliql": "workspace:*",
         "@repliql/shared-exchange": "workspace:*",
@@ -142,6 +143,7 @@
   "catalog": {
     "@0no-co/graphql.web": "^1.2.0",
     "@urql/core": "^6.0.1",
+    "comlink": "^4.4.2",
     "graphql": "^16.13.2",
     "kysely": "^0.28.16",
     "typescript": "^6.0.2",
@@ -512,13 +514,13 @@
 
     "@reduxjs/toolkit": ["@reduxjs/toolkit@2.11.2", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "@standard-schema/utils": "^0.3.0", "immer": "^11.0.0", "redux": "^5.0.1", "redux-thunk": "^3.1.0", "reselect": "^5.1.0" }, "peerDependencies": { "react": "^16.9.0 || ^17.0.0 || ^18 || ^19", "react-redux": "^7.2.1 || ^8.1.3 || ^9.0.0" }, "optionalPeers": ["react", "react-redux"] }, "sha512-Kd6kAHTA6/nUpp8mySPqj3en3dm0tdMIgbttnQ1xFMVpufoj+ADi8pXLBsd4xzTRHQa7t/Jv8W5UnCuW4kuWMQ=="],
 
+    "@repliql/conduit": ["@repliql/conduit@workspace:packages/conduit"],
+
     "@repliql/playground-linear": ["@repliql/playground-linear@workspace:playgrounds/linear"],
 
     "@repliql/reactive-kysely": ["@repliql/reactive-kysely@workspace:packages/reactive-kysely"],
 
     "@repliql/repliql": ["@repliql/repliql@workspace:packages/repliql"],
-
-    "@repliql/shared-dedicated-worker": ["@repliql/shared-dedicated-worker@workspace:packages/shared-dedicated-worker"],
 
     "@repliql/shared-exchange": ["@repliql/shared-exchange@workspace:packages/shared-exchange"],
 

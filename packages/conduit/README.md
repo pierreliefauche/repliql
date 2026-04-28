@@ -96,11 +96,11 @@ exposeToTab(service)
 **tab.ts** - The web app
 
 ```ts
-import { createSharedDedicatedWorker } from '@repliql/conduit/tab'
+import { createConduit } from '@repliql/conduit/tab'
 
 import type { Service } from './types.d.ts'
 
-const { consumeFromSharedWorker } = createSharedDedicatedWorker({
+const { consumeFromSharedWorker } = createConduit({
   dedicated: new Worker('worker.ts'),
   shared: new SharedWorker('shared-worker.ts'),
 })
