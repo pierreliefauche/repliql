@@ -4,8 +4,8 @@ import { wrap } from 'comlink'
 import { heartbeat as defaultHeartbeat, type Heartbeat } from './heartbeat'
 import { LeaderResignedError } from './protocol'
 
-interface TabEntry {
-  remote: Remote<unknown>
+interface TabEntry<T> {
+  remote: Remote<T>
   port: MessagePort | null
   registeredAt: number
 }
@@ -15,18 +15,18 @@ export interface BrokerListeners {
   onLeaderResigned?: (leaderId: string) => void
 }
 
-type Dispatch = (leaderId: string, remote: Remote<unknown>) => void
+type Dispatch<T> = (leaderId: string, remote: Remote<T>) => void
 
 /**
  * Broker that lives in the shared worker. Holds a Comlink remote for every connected
  * tab's dedicated worker, picks one as leader, and switches on tab death.
  */
-export class Broker {
+export class Broker<T> {
   private readonly heartbeat: Heartbeat
-  private readonly tabs = new Map<string, TabEntry>()
+  private readonly tabs = new Map<string, TabEntry<T>>()
   private currentLeaderId: string | null = null
   private readonly listeners = new Set<BrokerListeners>()
-  private readonly pendingDispatches: Dispatch[] = []
+  private readonly pendingDispatches: Dispatch<T>[] = []
   private readonly inflightByLeader = new Map<string, Set<() => void>>()
 
   constructor(heartbeat: Heartbeat = defaultHeartbeat) {
@@ -42,11 +42,11 @@ export class Broker {
    * (or any object behaving like one). Exposed for tests; production code
    * uses `registerTab`.
    */
-  public register(tabId: string, remote: Remote<unknown>): void {
+  public register(tabId: string, remote: Remote<T>): void {
     this._register(tabId, remote, null)
   }
 
-  private _register(tabId: string, remote: Remote<unknown>, port: MessagePort | null): void {
+  private _register(tabId: string, remote: Remote<T>, port: MessagePort | null): void {
     if (this.tabs.has(tabId)) {
       return
     }
@@ -83,9 +83,9 @@ export class Broker {
    * until one is promoted. If the leader is replaced before the underlying call resolves,
    * the returned promise rejects with `LeaderResignedError`.
    */
-  public callOnLeader<R>(invoke: (remote: Remote<unknown>) => Promise<R> | R): Promise<R> {
+  public callOnLeader<R>(invoke: (remote: Remote<T>) => Promise<R> | R): Promise<R> {
     return new Promise<R>((resolve, reject) => {
-      const dispatch: Dispatch = (leaderId, remote) => {
+      const dispatch: Dispatch<T> = (leaderId, remote) => {
         let settled = false
         const onResign = () => {
           if (settled) {

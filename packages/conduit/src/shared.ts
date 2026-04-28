@@ -13,21 +13,21 @@ export interface ExposeOptions {
   heartbeat?: Heartbeat
 }
 
-let singletonBroker: Broker | null = null
+let singletonBroker: Broker<unknown> | null = null
 
-function getBroker(heartbeat?: Heartbeat): Broker {
+function getBroker<T>(heartbeat?: Heartbeat): Broker<T> {
   if (!singletonBroker) {
     singletonBroker = new Broker(heartbeat)
   }
 
-  return singletonBroker
+  return singletonBroker as Broker<T>
 }
 
 /**
  * For tests: replace the module-level Broker. Production code should never call this.
  */
 export const testOnly = {
-  setBroker(broker: Broker | null) {
+  setBroker(broker: Broker<unknown> | null) {
     singletonBroker = broker
   },
 }
@@ -45,13 +45,13 @@ export function consumeFromDedicatedWorker<T extends Record<string, (...a: any[]
   opts: ConsumeOptions = {},
 ): Remote<T> {
   const { heartbeat: hb, onLeaderElected, onLeaderResigned } = opts
-  const broker = getBroker(hb)
+  const broker = getBroker<T>(hb)
   if (onLeaderElected || onLeaderResigned) {
     broker.addListener({ onLeaderElected, onLeaderResigned })
   }
 
   return new Proxy(Object.create(null) as Remote<T>, {
-    get(_target, prop) {
+    get(_target, prop: keyof T | symbol) {
       if (typeof prop === 'symbol') {
         return undefined
       }
@@ -64,12 +64,12 @@ export function consumeFromDedicatedWorker<T extends Record<string, (...a: any[]
 
       return (...args: unknown[]) =>
         broker.callOnLeader(remote => {
-          const fn = (remote as unknown as Record<string, (...a: unknown[]) => unknown>)[prop]
+          const fn = remote[prop]
           if (typeof fn !== 'function') {
-            throw new TypeError(`@repliql/conduit: leader has no method "${prop}"`)
+            throw new TypeError(`@repliql/conduit: leader has no method "${String(prop)}"`)
           }
-          return fn(...args) as Promise<unknown>
-        }) as Promise<unknown>
+          return fn(...args)
+        })
     },
   })
 }
