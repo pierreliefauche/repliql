@@ -47,6 +47,17 @@
         "wonka": "catalog:",
       },
     },
+    "packages/shared-dedicated-worker": {
+      "name": "@repliql/shared-dedicated-worker",
+      "version": "0.0.1",
+      "dependencies": {
+        "comlink": "^4.4.2",
+      },
+      "devDependencies": {
+        "@repliql/utils": "workspace:*",
+        "typescript": "catalog:",
+      },
+    },
     "packages/shared-exchange": {
       "name": "@repliql/shared-exchange",
       "version": "0.0.1",
@@ -506,6 +517,8 @@
     "@repliql/reactive-kysely": ["@repliql/reactive-kysely@workspace:packages/reactive-kysely"],
 
     "@repliql/repliql": ["@repliql/repliql@workspace:packages/repliql"],
+
+    "@repliql/shared-dedicated-worker": ["@repliql/shared-dedicated-worker@workspace:packages/shared-dedicated-worker"],
 
     "@repliql/shared-exchange": ["@repliql/shared-exchange@workspace:packages/shared-exchange"],
 
