@@ -1,32 +1,29 @@
-import { expose } from 'comlink'
+import { isDedicatedPortMessage, isElectedLeaderMessage } from './protocol'
 
-import { isDedicatedPortMessage } from './protocol'
+type DedicatedConduitConfig = {
+  onSharedWorkerPort?: (sharedWorkerPort: MessagePort) => void
+  onElectedLeader?: (sharedWorkerPort: MessagePort) => void
+}
 
-/**
- * Exposes the dedicated worker's API to the shared worker through its host tab.
- *
- * The host tab creates a `MessageChannel` per leadership cycle and posts one
- * port to this dedicated worker via a `__conduit`-tagged envelope. We listen
- * for that envelope and Comlink-`expose` `api` on the transferred port. The
- * other port is handed to the shared worker, which then talks to this
- * dedicated worker through the channel.
- *
- * Idempotent against repeat envelopes for the same port: each port is exposed
- * at most once.
- */
-export function exposeToSharedWorker<T>(api: T): void {
-  const exposedPorts = new WeakSet<MessagePort>()
+export function conduit(config: DedicatedConduitConfig) {
+  const { onSharedWorkerPort, onElectedLeader } = config
+
+  let sharedWorkerPort: MessagePort | null = null
+
   ;(self as DedicatedWorkerGlobalScope).addEventListener('message', (event: MessageEvent) => {
-    if (!isDedicatedPortMessage(event.data)) {
-      return
-    }
+    if (isDedicatedPortMessage(event.data)) {
+      sharedWorkerPort = event.data.port
+      onSharedWorkerPort?.(event.data.port)
 
-    const { port } = event.data
-    if (exposedPorts.has(port)) {
-      return
-    }
+      if (onElectedLeader) {
+        sharedWorkerPort.addEventListener('message', ({ data }) => {
+          if (isElectedLeaderMessage(data) && sharedWorkerPort) {
+            onElectedLeader(sharedWorkerPort)
+          }
+        })
+      }
 
-    exposedPorts.add(port)
-    expose(api, port)
+      sharedWorkerPort.start()
+    }
   })
 }

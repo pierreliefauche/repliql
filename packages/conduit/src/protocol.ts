@@ -10,6 +10,8 @@ export const CONDUIT_DEDICATED_PORT = 'dedicated-port' as const
 export const CONDUIT_REGISTER_TAB = 'register-tab' as const
 /** Tab → shared worker: explicit teardown signal (sent on `pagehide` / `dispose`). */
 export const CONDUIT_UNREGISTER_TAB = 'unregister-tab' as const
+/** Shared worker → dedicated worker: the dedicated worker is becoming leader */
+export const CONDUIT_ELECTED_LEADER = 'elected-leader' as const
 
 export interface DedicatedPortMessage {
   __conduit: typeof CONDUIT_DEDICATED_PORT
@@ -25,6 +27,10 @@ export interface RegisterTabMessage {
 export interface UnregisterTabMessage {
   __conduit: typeof CONDUIT_UNREGISTER_TAB
   tabId: string
+}
+
+export interface ElectedLeaderMessage {
+  __conduit: typeof CONDUIT_ELECTED_LEADER
 }
 
 export function isDedicatedPortMessage(data: unknown): data is DedicatedPortMessage {
@@ -53,6 +59,14 @@ export function isUnregisterTabMessage(data: unknown): data is UnregisterTabMess
   }
   const msg = data as Partial<UnregisterTabMessage>
   return msg.__conduit === CONDUIT_UNREGISTER_TAB && typeof msg.tabId === 'string'
+}
+
+export function isElectedLeaderMessage(data: unknown): data is ElectedLeaderMessage {
+  if (typeof data !== 'object' || data === null) {
+    return false
+  }
+  const msg = data as Partial<ElectedLeaderMessage>
+  return msg.__conduit === CONDUIT_ELECTED_LEADER
 }
 
 /**

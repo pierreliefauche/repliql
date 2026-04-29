@@ -1,4 +1,5 @@
-import { exposeToSharedWorker } from '@repliql/conduit/dedicated'
+import { conduit } from '@repliql/conduit/dedicated'
+import { expose } from 'comlink'
 
 import type { Computations } from './types'
 
@@ -13,4 +14,11 @@ const computations: Computations = {
   },
 }
 
-exposeToSharedWorker(computations)
+conduit({
+  onSharedWorkerPort(port) {
+    expose(computations, port)
+  },
+  onElectedLeader() {
+    console.log('I am leader now!')
+  },
+})

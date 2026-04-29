@@ -2,7 +2,7 @@ import type { Remote } from 'comlink'
 import { wrap } from 'comlink'
 
 import { heartbeat as defaultHeartbeat, type Heartbeat } from './heartbeat'
-import { LeaderResignedError } from './protocol'
+import { CONDUIT_ELECTED_LEADER, LeaderResignedError } from './protocol'
 
 interface TabEntry<T> {
   remote: Remote<T>
@@ -201,6 +201,8 @@ export class Broker<T> {
     }
 
     this.currentLeaderId = tabId
+
+    entry.port?.postMessage({ __conduit: CONDUIT_ELECTED_LEADER })
 
     for (const l of this.listeners) {
       l.onLeaderElected?.(tabId)

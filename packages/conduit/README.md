@@ -40,7 +40,8 @@ export interface Service {
 **worker.ts** - The dedicated worker
 
 ```ts
-import { exposeToSharedWorker } from '@repliql/conduit/dedicated'
+import { conduit } from '@repliql/conduit/dedicated'
+import * as Comlink from 'comlink'
 
 import type { Computations } from './types.d.ts'
 
@@ -53,7 +54,11 @@ const computations: Computations = {
   },
 }
 
-exposeToSharedWorker(computations)
+conduit({
+  onElectedLeader(port) {
+    Comlink.expose(computations, port)
+  },
+})
 ```
 
 **shared-worker.ts** - The shared worker
