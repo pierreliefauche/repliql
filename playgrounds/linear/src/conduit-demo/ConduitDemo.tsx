@@ -1,11 +1,11 @@
-import { createConduit } from '@repliql/conduit/tab'
-import type { Remote } from '@repliql/conduit/tab'
+import { conduit } from '@repliql/conduit/tab'
+import * as Comlink from 'comlink'
 import { useEffect, useState } from 'react'
 
 import type { CounterService } from './types'
 
 interface Handle {
-  service: Remote<CounterService>
+  service: Comlink.Remote<CounterService>
   tabId: string
 }
 
@@ -26,10 +26,13 @@ function getHandle(): Handle {
     name: 'conduit-demo-shared',
   })
 
-  const { tabId, consumeFromSharedWorker } = createConduit({ dedicated, shared })
+  const { tabId } = conduit({
+    loadWorker: () => dedicated,
+    loadSharedWorker: () => shared,
+  })
 
   cached = {
-    service: consumeFromSharedWorker<CounterService>(),
+    service: Comlink.wrap(shared.port),
     tabId,
   }
 

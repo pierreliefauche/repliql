@@ -11,15 +11,22 @@ interface TabEntry<T> {
 }
 
 export interface BrokerListeners {
+  /** Fired when `leaderId` is promoted. Also fires immediately on `addListener` if a leader already exists. */
   onLeaderElected?: (leaderId: string) => void
+  /** Fired when `leaderId` (the current leader) dies or unregisters. Always followed by an `onLeaderElected` if any tabs remain. */
   onLeaderResigned?: (leaderId: string) => void
 }
 
 type Dispatch<T> = (leaderId: string, remote: Remote<T>) => void
 
 /**
- * Broker that lives in the shared worker. Holds a Comlink remote for every connected
- * tab's dedicated worker, picks one as leader, and switches on tab death.
+ * Broker living inside the shared worker. It holds a Comlink remote for every
+ * registered tab's dedicated worker, elects one tab as leader, and re-elects
+ * on tab death (using a `Heartbeat` to detect the death).
+ *
+ * Callers route work through `callOnLeader`, which queues until the first
+ * leader is elected and rejects in-flight calls with `LeaderResignedError`
+ * when the leader dies mid-call. The next leader is the *youngest* tab.
  */
 export class Broker<T> {
   private readonly heartbeat: Heartbeat
@@ -33,6 +40,12 @@ export class Broker<T> {
     this.heartbeat = heartbeat
   }
 
+  /**
+   * Registers `tabId` with the `MessagePort` reaching its dedicated worker.
+   * The port is `Comlink.wrap`ed and stored; if no leader exists, this tab is
+   * immediately promoted. The broker takes ownership of the port and closes
+   * it on removal.
+   */
   public registerTab(tabId: string, port: MessagePort): void {
     this._register(tabId, wrap(port), port)
   }
@@ -62,10 +75,19 @@ export class Broker<T> {
     }
   }
 
+  /**
+   * Explicit teardown for a tab — equivalent to the heartbeat reporting the
+   * tab as stopped. Triggers re-election if the unregistered tab was leader.
+   */
   public unregisterTab(tabId: string): void {
     this._removeTab(tabId)
   }
 
+  /**
+   * Subscribe to leader-election events. Returns an unsubscribe function. If
+   * a leader already exists at subscription time, `onLeaderElected` is fired
+   * synchronously with the current leader id.
+   */
   public addListener(listener: BrokerListeners): () => void {
     this.listeners.add(listener)
 

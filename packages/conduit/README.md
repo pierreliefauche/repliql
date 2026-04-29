@@ -20,9 +20,9 @@ Leader election and tab close detection is done with [Web Locks](https://develop
 
 To access the dedicated worker capabilities, the shared worker communicates through the elected tab. Only one tab/dedicated worker is elected leader at any given time.
 
-## Setup
+## Example
 
-**types.d.ts** - Define types for
+**types.d.ts** - Define types of shared interfaces
 
 ```ts
 export interface Computations {
@@ -45,15 +45,12 @@ import { exposeToSharedWorker } from '@repliql/conduit/dedicated'
 import type { Computations } from './types.d.ts'
 
 const computations: Computations = {
-  initialize() {
-    console.log('Initializing dedicated tab...')
-  },
   square(value: number) {
     return value * value
-  }
+  },
   abs(value: number) {
     return Math.abs(value)
-  }
+  },
 }
 
 exposeToSharedWorker(computations)
@@ -62,50 +59,56 @@ exposeToSharedWorker(computations)
 **shared-worker.ts** - The shared worker
 
 ```ts
-import { consumeFromDedicatedWorker, exposeToTab } from '@repliql/conduit/shared'
+import { conduit } from '@repliql/conduit/shared'
+import * as Comlink from 'comlink'
 
 import type { Computations, Service } from './types.d.ts'
 
-const computations = consumeFromDedicatedWorker<Computations>({
-  onLeaderElected() {
-    console.log('New leader elected!')
-    computations.initialize()
+const { wrapDedicatedWorker, onConnectTab } = conduit()
+
+const computations = wrapDedicatedWorker<Computations>({
+  onLeaderElected(id) {
+    console.log('New leader elected:', id)
   },
-  onLeaderResigned() {
-    console.log('Leader resigned, waiting for new leader')
+  onLeaderResigned(id) {
+    console.log('Leader resigned:', id)
   },
 })
 
 let i = 0
 
 const service: Service = {
-  add(offset: number) {
+  increment(offset: number) {
     i += offset
   },
-  getSquare() {
+  async getSquare() {
     return await computations.square(i)
   },
-  getAbs() {
+  async getAbs() {
     return await computations.abs(i)
   },
 }
 
-exposeToTab(service)
+// Use instead of `self.onconnect = ...`
+onConnectTab(port => {
+  Comlink.expose(service, port)
+})
 ```
 
 **tab.ts** - The web app
 
 ```ts
-import { createConduit } from '@repliql/conduit/tab'
+import { conduit } from '@repliql/conduit/tab'
+import * as Comlink from 'comlink'
 
 import type { Service } from './types.d.ts'
 
-const { consumeFromSharedWorker } = createConduit({
-  dedicated: new Worker('worker.ts'),
-  shared: new SharedWorker('shared-worker.ts'),
+const { sharedWorker } = conduit({
+  loadWorker: () => new Worker('worker.ts'),
+  loadSharedWorker: () => new SharedWorker('shared-worker.ts'),
 })
 
-const service = consumeFromSharedWorker<Service>()
+const service = Comlink.wrap<Service>(sharedWorker.port)
 
 Promise.resolve().then(async () => {
   await service.increment(6)

@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'bun:test'
 
-import { isDedicatedPortMessage, LeaderResignedError, SDW_DEDICATED_PORT } from './protocol'
+import { isDedicatedPortMessage, LeaderResignedError, CONDUIT_DEDICATED_PORT } from './protocol'
 
 describe('protocol', () => {
   describe('isDedicatedPortMessage', () => {
     it('accepts a properly tagged envelope with a MessagePort', () => {
       const channel = new MessageChannel()
-      const message = { __sdw: SDW_DEDICATED_PORT, port: channel.port1 }
+      const message = { __conduit: CONDUIT_DEDICATED_PORT, port: channel.port1 }
       expect(isDedicatedPortMessage(message)).toBe(true)
     })
 
@@ -16,7 +16,7 @@ describe('protocol', () => {
     })
 
     it('rejects a tagged message whose port is not a MessagePort', () => {
-      expect(isDedicatedPortMessage({ __sdw: SDW_DEDICATED_PORT, port: {} })).toBe(false)
+      expect(isDedicatedPortMessage({ __conduit: CONDUIT_DEDICATED_PORT, port: {} })).toBe(false)
     })
 
     it('rejects unrelated payload types', () => {

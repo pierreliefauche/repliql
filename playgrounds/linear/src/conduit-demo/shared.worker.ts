@@ -1,8 +1,11 @@
-import { consumeFromDedicatedWorker, exposeToTab } from '@repliql/conduit/shared'
+import { conduit } from '@repliql/conduit/shared'
+import { expose } from 'comlink'
 
 import type { Computations, CounterService } from './types'
 
-const computations = consumeFromDedicatedWorker<Computations>({
+const { wrapDedicatedWorker, onConnectTab } = conduit()
+
+const computations = wrapDedicatedWorker<Computations>({
   onLeaderElected: id => {
     console.log('[conduit shared] leader elected:', id)
   },
@@ -28,4 +31,6 @@ const service: CounterService = {
   },
 }
 
-exposeToTab(service)
+onConnectTab(port => {
+  expose(service, port)
+})

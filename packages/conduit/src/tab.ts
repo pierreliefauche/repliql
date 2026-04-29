@@ -1,60 +1,75 @@
 import { randomId } from '@repliql/utils'
-import type { Remote } from 'comlink'
-import { transfer, wrap } from 'comlink'
 
 import { heartbeat as defaultHeartbeat, type Heartbeat } from './heartbeat'
-import { type BrokerApi, SDW_DEDICATED_PORT } from './protocol'
-
-export type { Remote }
-
-/**
- * The shared-side bundles `{ user, broker }` over a single Comlink endpoint, with `broker`
- * marked via `Comlink.proxy()` so it chains through. Comlink's generic `Remote<T>`
- * doesn't model nested-proxy chaining for plain-object properties, so we describe
- * the wrapped shape manually.
- */
-interface CombinedRemote {
-  user: Remote<unknown>
-  broker: Remote<BrokerApi>
-}
+import { CONDUIT_DEDICATED_PORT, CONDUIT_REGISTER_TAB, CONDUIT_UNREGISTER_TAB } from './protocol'
 
 export interface CreateConduitConfig {
-  dedicated: Worker
-  shared: SharedWorker
+  /** Factory for this tab's dedicated worker. */
+  loadWorker: () => Worker
+  /** Factory for the shared worker. The returned `SharedWorker` is also exposed on the handle. */
+  loadSharedWorker: () => SharedWorker
+  /**
+   * Override the default Web Locks-based heartbeat. Must match the heartbeat
+   * configured in the shared worker.
+   */
   heartbeat?: Heartbeat
 }
 
 export interface ConduitHandle {
+  /** Stable per-tab identifier used for leader election and heartbeats. */
   tabId: string
-  consumeFromSharedWorker<T>(): Remote<T>
+  /** The shared worker created via `loadSharedWorker`. Wrap `sharedWorker.port` with Comlink to talk to the shared service. */
+  sharedWorker: SharedWorker
+  /**
+   * Best-effort teardown: waits for registration to finish (or fail), then
+   * sends an `unregister-tab` envelope so the shared worker can promote
+   * another leader without waiting for the heartbeat lock to release.
+   */
   dispose(): Promise<void>
 }
 
 /**
- * Wires a tab's dedicated worker to the shared worker:
- *   1. Acquires a per-tab heartbeat lock so the shared worker can detect tab death.
- *   2. Creates a `MessageChannel`, posts one port to the dedicated worker (which
- *      Comlink-exposes its API on it), and hands the other port to the shared
- *      worker via `broker.registerTab`. The shared worker then has a live remote
- *      to this tab's dedicated worker.
+ * Wires a tab's dedicated worker to the shared worker.
  *
- * The tab itself doesn't decide whether it's leader — the shared worker does.
+ * On call:
+ *   1. Acquires a per-tab heartbeat lock so the shared worker can detect tab
+ *      death (default backend: Web Locks).
+ *   2. Creates a `MessageChannel`, posts one port to the dedicated worker
+ *      (which Comlink-exposes its API on it via `exposeToSharedWorker`), and
+ *      hands the other port to the shared worker through a `register-tab`
+ *      envelope. The shared worker now holds a live remote to this tab's
+ *      dedicated worker.
+ *   3. Registers a `pagehide` listener that posts `unregister-tab` so the
+ *      shared worker can fail over promptly when the tab is closed.
+ *
+ * The tab itself doesn't decide whether it's leader — the shared worker's
+ * broker does, picking the oldest registered tab and re-electing on death.
  */
-export function createConduit(config: CreateConduitConfig): ConduitHandle {
-  const { dedicated, shared, heartbeat = defaultHeartbeat } = config
+export function conduit(config: CreateConduitConfig): ConduitHandle {
+  const { loadSharedWorker, loadWorker, heartbeat = defaultHeartbeat } = config
+
+  const sharedWorker = loadSharedWorker()
+  const dedicatedWorker = loadWorker()
+
   const tabId = randomId()
-  const wrapped = wrap(shared.port) as unknown as CombinedRemote
 
   const registerPromise = (async () => {
     await heartbeat.start(tabId)
+    sharedWorker.port.start()
+
     const channel = new MessageChannel()
-    dedicated.postMessage({ __sdw: SDW_DEDICATED_PORT, port: channel.port1 }, [channel.port1])
-    await wrapped.broker.registerTab(tabId, transfer(channel.port2, [channel.port2]))
+    dedicatedWorker.postMessage({ __conduit: CONDUIT_DEDICATED_PORT, port: channel.port1 }, [
+      channel.port1,
+    ])
+    sharedWorker.port.postMessage({ __conduit: CONDUIT_REGISTER_TAB, port: channel.port2, tabId }, [
+      channel.port2,
+    ])
   })()
 
-  const cleanup = (): void => {
-    void wrapped.broker.unregisterTab(tabId)
+  const cleanup = () => {
+    sharedWorker.port.postMessage({ __conduit: CONDUIT_UNREGISTER_TAB, tabId })
   }
+
   if (typeof globalThis !== 'undefined' && 'addEventListener' in globalThis) {
     ;(globalThis as unknown as Window).addEventListener('pagehide', cleanup)
   }
@@ -62,10 +77,7 @@ export function createConduit(config: CreateConduitConfig): ConduitHandle {
   return {
     tabId,
 
-    consumeFromSharedWorker<T>(): Remote<T> {
-      shared.port.start()
-      return wrapped.user as Remote<T>
-    },
+    sharedWorker,
 
     async dispose() {
       try {
@@ -73,11 +85,7 @@ export function createConduit(config: CreateConduitConfig): ConduitHandle {
       } catch {
         // ignore — registration may have failed; we still attempt cleanup
       }
-      try {
-        await wrapped.broker.unregisterTab(tabId)
-      } catch {
-        // ignore — port may already be closed
-      }
+      cleanup()
     },
   }
 }
