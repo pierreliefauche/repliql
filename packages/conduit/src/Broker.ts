@@ -1,6 +1,7 @@
 import type { Remote } from 'comlink'
 import { wrap } from 'comlink'
 
+import { ConduitEventEmitter } from './events'
 import { heartbeat as defaultHeartbeat, type Heartbeat } from './heartbeat'
 import { CONDUIT_ELECTED_LEADER, LeaderResignedError } from './protocol'
 
@@ -8,13 +9,6 @@ interface TabEntry<T> {
   remote: Remote<T>
   port: MessagePort | null
   registeredAt: number
-}
-
-export interface BrokerListeners {
-  /** Fired when `leaderId` is promoted. Also fires immediately on `addListener` if a leader already exists. */
-  onLeaderElected?: (leaderId: string) => void
-  /** Fired when `leaderId` (the current leader) dies or unregisters. Always followed by an `onLeaderElected` if any tabs remain. */
-  onLeaderResigned?: (leaderId: string) => void
 }
 
 type Dispatch<T> = (leaderId: string, remote: Remote<T>) => void
@@ -32,11 +26,12 @@ export class Broker<T> {
   private readonly heartbeat: Heartbeat
   private readonly tabs = new Map<string, TabEntry<T>>()
   private currentLeaderId: string | null = null
-  private readonly listeners = new Set<BrokerListeners>()
   private readonly pendingDispatches: Dispatch<T>[] = []
   private readonly inflightByLeader = new Map<string, Set<() => void>>()
+  public readonly events: ConduitEventEmitter
 
-  constructor(heartbeat: Heartbeat = defaultHeartbeat) {
+  constructor(events: ConduitEventEmitter, heartbeat: Heartbeat = defaultHeartbeat) {
+    this.events = events
     this.heartbeat = heartbeat
   }
 
@@ -84,20 +79,10 @@ export class Broker<T> {
   }
 
   /**
-   * Subscribe to leader-election events. Returns an unsubscribe function. If
-   * a leader already exists at subscription time, `onLeaderElected` is fired
-   * synchronously with the current leader id.
+   * Returns the current leader ID, or `null` if no leader is elected.
    */
-  public addListener(listener: BrokerListeners): () => void {
-    this.listeners.add(listener)
-
-    if (this.currentLeaderId) {
-      listener.onLeaderElected?.(this.currentLeaderId)
-    }
-
-    return () => {
-      this.listeners.delete(listener)
-    }
+  public getLeaderId(): string | null {
+    return this.currentLeaderId
   }
 
   /**
@@ -183,9 +168,7 @@ export class Broker<T> {
       const oldLeaderId = tabId
       this.currentLeaderId = null
 
-      for (const l of this.listeners) {
-        l.onLeaderResigned?.(oldLeaderId)
-      }
+      this.events.emit('leaderResigned', { leaderId: oldLeaderId })
 
       const nextLeaderId = this._pickNextLeader()
       if (nextLeaderId) {
@@ -204,9 +187,7 @@ export class Broker<T> {
 
     entry.port?.postMessage({ __conduit: CONDUIT_ELECTED_LEADER })
 
-    for (const l of this.listeners) {
-      l.onLeaderElected?.(tabId)
-    }
+    this.events.emit('leaderElected', { leaderId: tabId })
 
     if (this.pendingDispatches.length > 0) {
       const pending = this.pendingDispatches.splice(0)

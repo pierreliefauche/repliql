@@ -46,10 +46,10 @@
     "test:watch": "bun test ./src/**/*.test.ts ./src/*.test.ts --watch"
   },
   "dependencies": {
+    "@repliql/utils": "workspace:*",
     "comlink": "catalog:"
   },
   "devDependencies": {
-    "@repliql/utils": "workspace:*",
     "typescript": "catalog:"
   }
 }

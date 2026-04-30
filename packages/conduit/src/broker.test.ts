@@ -3,6 +3,7 @@ import { describe, it, expect } from 'bun:test'
 import type { Remote } from 'comlink'
 
 import { Broker } from './Broker'
+import { ConduitEventEmitter } from './events'
 import type { Heartbeat } from './heartbeat'
 import { LeaderResignedError } from './protocol'
 
@@ -55,11 +56,12 @@ function makeRemote(label: string, opts: { multiplier?: number } = {}): Remote<F
 }
 
 describe('Broker', () => {
-  it('promotes the first registered tab and fires onLeaderElected', () => {
+  it('promotes the first registered tab and fires leaderElected', () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
     const elected: string[] = []
-    broker.addListener({ onLeaderElected: id => elected.push(id) })
+    events.on('leaderElected', ({ leaderId }) => elected.push(leaderId))
 
     broker.register('tab-A', makeRemote('A'))
     expect(elected).toEqual(['tab-A'])
@@ -67,9 +69,10 @@ describe('Broker', () => {
 
   it('does not re-elect when a second tab registers', () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
     const elected: string[] = []
-    broker.addListener({ onLeaderElected: id => elected.push(id) })
+    events.on('leaderElected', ({ leaderId }) => elected.push(leaderId))
 
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
@@ -78,7 +81,8 @@ describe('Broker', () => {
 
   it('routes calls to the current leader', async () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
 
@@ -88,33 +92,34 @@ describe('Broker', () => {
 
   it('queues calls until a leader exists, then flushes', async () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
     const pending = broker.callOnLeader(remote => (remote as unknown as FakeRemote).ping())
 
     broker.register('tab-A', makeRemote('A'))
     expect(await pending).toBe('A')
   })
 
-  it('fires onLeaderResigned then onLeaderElected on leader death', () => {
+  it('fires leaderResigned then leaderElected on leader death', () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
-    const events: string[] = []
-    broker.addListener({
-      onLeaderElected: id => events.push(`elect:${id}`),
-      onLeaderResigned: id => events.push(`resign:${id}`),
-    })
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
+    const log: string[] = []
+    events.on('leaderElected', ({ leaderId }) => log.push(`elect:${leaderId}`))
+    events.on('leaderResigned', ({ leaderId }) => log.push(`resign:${leaderId}`))
 
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
     hb.stop('tab-A')
-    expect(events).toEqual(['elect:tab-A', 'resign:tab-A', 'elect:tab-B'])
+    expect(log).toEqual(['elect:tab-A', 'resign:tab-A', 'elect:tab-B'])
   })
 
   it('promotes the oldest surviving tab (FIFO)', () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
     const elected: string[] = []
-    broker.addListener({ onLeaderElected: id => elected.push(id) })
+    events.on('leaderElected', ({ leaderId }) => elected.push(leaderId))
 
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
@@ -125,7 +130,8 @@ describe('Broker', () => {
 
   it('routes to the new leader after failover', async () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
     hb.stop('tab-A')
@@ -136,7 +142,8 @@ describe('Broker', () => {
 
   it('queues calls when the only tab dies and resolves on next registration', async () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
     broker.register('tab-A', makeRemote('A'))
     hb.stop('tab-A')
 
@@ -147,7 +154,8 @@ describe('Broker', () => {
 
   it('rejects in-flight calls with LeaderResignedError when leader resigns', async () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
 
@@ -159,7 +167,8 @@ describe('Broker', () => {
 
   it('does not reject in-flight calls when a non-leader tab dies', async () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
 
@@ -168,28 +177,27 @@ describe('Broker', () => {
     expect(await pending).toBe(7)
   })
 
-  it('addListener fires onLeaderElected immediately if a leader already exists', () => {
+  it('getLeaderId returns the current leader', () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
-    broker.register('tab-A', makeRemote('A'))
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
+    expect(broker.getLeaderId()).toBeNull()
 
-    const elected: string[] = []
-    broker.addListener({ onLeaderElected: id => elected.push(id) })
-    expect(elected).toEqual(['tab-A'])
+    broker.register('tab-A', makeRemote('A'))
+    expect(broker.getLeaderId()).toBe('tab-A')
   })
 
   it('unregisterTab is equivalent to a heartbeat stop', () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
-    const events: string[] = []
-    broker.addListener({
-      onLeaderElected: id => events.push(`elect:${id}`),
-      onLeaderResigned: id => events.push(`resign:${id}`),
-    })
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
+    const log: string[] = []
+    events.on('leaderElected', ({ leaderId }) => log.push(`elect:${leaderId}`))
+    events.on('leaderResigned', ({ leaderId }) => log.push(`resign:${leaderId}`))
 
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
     broker.unregisterTab('tab-A')
-    expect(events).toEqual(['elect:tab-A', 'resign:tab-A', 'elect:tab-B'])
+    expect(log).toEqual(['elect:tab-A', 'resign:tab-A', 'elect:tab-B'])
   })
 })

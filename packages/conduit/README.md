@@ -69,16 +69,17 @@ import * as Comlink from 'comlink'
 
 import type { Computations, Service } from './types.d.ts'
 
-const { wrapDedicatedWorker, onConnectTab } = conduit()
+const { wrapDedicatedWorker, onConnectTab, events } = conduit()
 
-const computations = wrapDedicatedWorker<Computations>({
-  onLeaderElected(id) {
-    console.log('New leader elected:', id)
-  },
-  onLeaderResigned(id) {
-    console.log('Leader resigned:', id)
-  },
-})
+events
+  .on('leaderElected', ({ leaderId }) => {
+    console.log('New leader elected:', leaderId)
+  })
+  .on('leaderResigned', ({ leaderId }) => {
+    console.log('Leader resigned:', leaderId)
+  })
+
+const computations = wrapDedicatedWorker<Computations>()
 
 let i = 0
 

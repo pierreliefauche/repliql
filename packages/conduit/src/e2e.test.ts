@@ -4,6 +4,7 @@ import * as Comlink from 'comlink'
 import type { Remote } from 'comlink'
 
 import { Broker } from './Broker'
+import { ConduitEventEmitter } from './events'
 import type { Heartbeat } from './heartbeat'
 import { CONDUIT_REGISTER_TAB } from './protocol'
 import { conduit } from './shared'
@@ -81,10 +82,9 @@ function setupConduit(heartbeat: Heartbeat) {
       registerTab(tabId: string, dedicatedPort: MessagePort) {
         const channel = new MessageChannel()
         connectHandler!({ ports: [channel.port1] })
-        channel.port2.postMessage(
-          { __conduit: CONDUIT_REGISTER_TAB, tabId, port: dedicatedPort },
-          [dedicatedPort],
-        )
+        channel.port2.postMessage({ __conduit: CONDUIT_REGISTER_TAB, tabId, port: dedicatedPort }, [
+          dedicatedPort,
+        ])
       },
     }
   } finally {
@@ -95,7 +95,8 @@ function setupConduit(heartbeat: Heartbeat) {
 describe('e2e: Broker + Comlink + MessageChannel', () => {
   it("routes calls through Comlink to the leader's dedicated worker", async () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
 
     broker.registerTab('tab-A', spawnDedicated('A', 1))
     broker.registerTab('tab-B', spawnDedicated('B', 10))
@@ -108,7 +109,8 @@ describe('e2e: Broker + Comlink + MessageChannel', () => {
 
   it('fails over to tab-B after tab-A dies', async () => {
     const hb = makeFakeHeartbeat()
-    const broker = new Broker(hb)
+    const events = new ConduitEventEmitter()
+    const broker = new Broker(events, hb)
 
     broker.registerTab('tab-A', spawnDedicated('A', 1))
     broker.registerTab('tab-B', spawnDedicated('B', 10))

@@ -18,10 +18,10 @@
       "name": "@repliql/conduit",
       "version": "0.0.1",
       "dependencies": {
+        "@repliql/utils": "workspace:*",
         "comlink": "catalog:",
       },
       "devDependencies": {
-        "@repliql/utils": "workspace:*",
         "typescript": "catalog:",
       },
     },
@@ -82,6 +82,7 @@
         "@0no-co/graphql.web": "catalog:",
         "@solana/fast-stable-stringify": "^6.8.0",
         "@urql/core": "catalog:",
+        "strict-event-emitter": "^0.5.1",
       },
       "devDependencies": {
         "graphql": "catalog:",

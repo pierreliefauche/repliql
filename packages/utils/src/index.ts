@@ -6,6 +6,7 @@ export type { HashValue } from './hash'
 export { SourceMap } from './SourceMap'
 export { randomId } from './randomId'
 export { areEqual } from './areEqual'
+export { EventEmitter } from './EventEmitter'
 
 // GraphQL
 

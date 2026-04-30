@@ -1,6 +1,7 @@
 import type { Remote } from 'comlink'
 
-import { Broker, BrokerListeners } from './Broker'
+import { Broker } from './Broker'
+import { ConduitEventEmitter } from './events'
 import { type Heartbeat } from './heartbeat'
 import { isRegisterTabMessage, isUnregisterTabMessage } from './protocol'
 
@@ -33,7 +34,8 @@ type OnConnectTabCallback = (port: MessagePort) => void
 export function conduit(config: SharedConduitConfig = {}) {
   const { heartbeat } = config
 
-  const broker = new Broker(heartbeat)
+  const events = new ConduitEventEmitter()
+  const broker = new Broker(events, heartbeat)
   const connectTabCallbacks = new Set<OnConnectTabCallback>()
 
   ;(self as unknown as SharedWorkerGlobalScope).addEventListener('connect', ({ ports }) => {
@@ -78,19 +80,8 @@ export function conduit(config: SharedConduitConfig = {}) {
    * Only method-call access is supported (`api.method(args)`); plain property
    * access returns `undefined`. The proxy is intentionally non-thenable so that
    * accidentally `await`ing it does not trigger a remote `then` call.
-   *
-   * Optional `listeners` are forwarded to the broker so the shared worker can
-   * react to leader-election events (e.g. to bootstrap leader-only state).
    */
-  function wrapDedicatedWorker<T extends Record<string, (...a: any[]) => unknown>>(
-    opts: BrokerListeners = {},
-  ): Remote<T> {
-    const { onLeaderElected, onLeaderResigned } = opts
-
-    if (onLeaderElected || onLeaderResigned) {
-      broker.addListener({ onLeaderElected, onLeaderResigned })
-    }
-
+  function wrapDedicatedWorker<T extends Record<string, (...a: any[]) => unknown>>(): Remote<T> {
     return new Proxy(Object.create(null) as Remote<T>, {
       get(_target, prop: keyof T | symbol) {
         if (typeof prop === 'symbol') {
@@ -115,5 +106,5 @@ export function conduit(config: SharedConduitConfig = {}) {
     })
   }
 
-  return { wrapDedicatedWorker, onConnectTab }
+  return { wrapDedicatedWorker, onConnectTab, events }
 }
