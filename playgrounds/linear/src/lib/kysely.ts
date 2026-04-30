@@ -1,5 +1,4 @@
 import { ReactiveKysely } from '@repliql/reactive-kysely'
-import { makeUseLiveSelect } from '@repliql/reactive-kysely/react'
 import { type DatabaseSchema } from '@repliql/repliql'
 import { sql } from 'kysely'
 import { SQLocalKysely } from 'sqlocal/kysely'
@@ -13,8 +12,6 @@ export const kysely = new ReactiveKysely<DatabaseSchema>({
   createCallbackFunction,
   queryUpdateDebounceMs: 0,
 })
-
-export const useLiveSelect = makeUseLiveSelect<DatabaseSchema>()
 
 export async function dumpDatabase(): Promise<Record<string, unknown[]>> {
   const tables = await kysely.introspection.getTables()

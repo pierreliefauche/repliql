@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react'
 import { Provider as UrqlProvider } from 'urql'
 import { Route, Switch, Redirect } from 'wouter'
 
+import { BridgedKyselyDemo } from '@/bridged-kysely-demo/BridgedKyselyDemo'
 import { AppLayout } from '@/components/AppLayout'
 import { IssuesView } from '@/components/IssuesView'
 import { ProjectsView } from '@/components/ProjectsView'
@@ -48,6 +49,7 @@ const App = () => {
           <Sonner />
           <AppLayout onLogout={handleLogout}>
             <Switch>
+              <Route path="/kysely" component={BridgedKyselyDemo} />
               <Route path="/conduit" component={ConduitDemo} />
               <Route path="/issues" component={IssuesView} nest />
               <Route path="/projects" component={ProjectsView} nest />
