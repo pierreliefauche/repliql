@@ -27,16 +27,6 @@ conduit({
 
       console.log('[dedicated worker] Did create database')
 
-      // console.log('[dedicated worker] Creating function')
-      // db.createFunction({
-      //   name: 'myfun',
-      //   arity: -1, // allow any number of args
-      //   xFunc: (_ctx, ...args) => {
-      //     console.log('[dedicated worker] Called function with args', args)
-      //     return null
-      //   },
-      // })
-
       return db
     })
 
@@ -46,28 +36,26 @@ conduit({
 
     console.log('[dedicated worker] Did create database, creating driver bridge')
 
-    const bridge = new DriverBridge(dialect.createDriver)
+    const bridge = new DriverBridge({
+      createDriver: dialect.createDriver,
+      createCallbackFunction: async (name: string, cb: (...args: unknown[]) => void) => {
+        console.log('[dedicated worker] Creating function', name)
+        const db = await createDbPromise
 
-    const createCallbackFunction = async (opts: {
-      name: string
-      cb: (...args: unknown[]) => void
-    }) => {
-      console.log('[dedicated worker] Creating function', opts.name)
-      const db = await createDbPromise
-
-      db.createFunction({
-        name: opts.name,
-        arity: -1, // allow any number of args
-        xFunc: (_ctx, ...args) => {
-          opts.cb(...args)
-          return null
-        },
-      })
-    }
+        db.createFunction({
+          name,
+          arity: -1, // allow any number of args
+          xFunc: (_ctx, ...args) => {
+            cb(...args)
+            return null
+          },
+        })
+      },
+    })
 
     console.log('[dedicated worker] Did create bridge, exposing to shared worker')
 
-    expose(Object.assign(bridge, { createCallbackFunction }), port)
+    expose(bridge, port)
 
     console.log('[dedicated worker] Did expose bridge to shared port')
   },

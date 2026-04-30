@@ -8,6 +8,12 @@ import type {
 } from 'kysely'
 
 import { UnknownConnectionError } from './errors'
+import { CreateCallbackFunctionFn, DriverBridgeRemote } from './types'
+
+type DriverBridgeConfig = {
+  createDriver: () => Driver
+  createCallbackFunction: CreateCallbackFunctionFn
+}
 
 /**
  * Worker-side half of the bridge. Holds a lazily-initialized Kysely `Driver`
@@ -15,14 +21,17 @@ import { UnknownConnectionError } from './errors'
  * Comlink-cloneable methods keyed by id so a peer `BridgedDriver` in another
  * process can drive it through `Comlink.expose` / `Comlink.wrap`.
  */
-export class DriverBridge {
+export class DriverBridge implements DriverBridgeRemote {
   readonly #createDriver: () => Driver
   #driver: Driver | null = null
   #initPromise: Promise<void> | null = null
   readonly #connections = new Map<string, DatabaseConnection>()
 
-  constructor(createDriver: () => Driver) {
-    this.#createDriver = createDriver
+  public createCallbackFunction: CreateCallbackFunctionFn
+
+  constructor(config: DriverBridgeConfig) {
+    this.#createDriver = config.createDriver
+    this.createCallbackFunction = config.createCallbackFunction
   }
 
   /**

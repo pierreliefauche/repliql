@@ -187,7 +187,7 @@ export class Broker<T> {
 
     entry.port?.postMessage({ __conduit: CONDUIT_ELECTED_LEADER })
 
-    this.events.emit('leaderElected', { leaderId: tabId })
+    this.events.emit('leaderElected', { leaderId: tabId, port: entry.port })
 
     if (this.pendingDispatches.length > 0) {
       const pending = this.pendingDispatches.splice(0)

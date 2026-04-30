@@ -29,7 +29,9 @@
       "name": "@repliql/kysely-driver-bridge",
       "version": "0.0.1",
       "dependencies": {
+        "@repliql/conduit": "workspace:*",
         "@repliql/utils": "workspace:*",
+        "comlink": "catalog:",
       },
       "devDependencies": {
         "node-sqlite3-wasm": "^0.8.56",

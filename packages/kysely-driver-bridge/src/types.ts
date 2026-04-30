@@ -1,5 +1,10 @@
 import type { CompiledQuery, QueryResult, TransactionSettings } from 'kysely'
 
+export type CreateCallbackFunctionFn = (
+  fnName: string,
+  cb: (...args: any[]) => void,
+) => void | Promise<void>
+
 /**
  * Structural type matching the surface that `BridgedDriver` calls on the
  * remote `DriverBridge`. Compatible with both a local `DriverBridge` instance
@@ -7,6 +12,7 @@ import type { CompiledQuery, QueryResult, TransactionSettings } from 'kysely'
  * does not need a runtime dependency on `comlink`.
  */
 export type DriverBridgeRemote = {
+  createCallbackFunction: CreateCallbackFunctionFn
   init(): Promise<void>
   acquireConnection(): Promise<string>
   releaseConnection(connectionId: string): Promise<void>

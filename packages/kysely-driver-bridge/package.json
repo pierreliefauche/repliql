@@ -46,7 +46,9 @@
     "test:watch": "bun test ./src/**/*.test.ts ./src/*.test.ts --watch"
   },
   "dependencies": {
-    "@repliql/utils": "workspace:*"
+    "@repliql/conduit": "workspace:*",
+    "@repliql/utils": "workspace:*",
+    "comlink": "catalog:"
   },
   "devDependencies": {
     "node-sqlite3-wasm": "^0.8.56",

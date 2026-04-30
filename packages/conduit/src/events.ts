@@ -5,7 +5,7 @@ import { EventEmitter } from '@repliql/utils'
  */
 
 type ConduitEventMap = {
-  leaderElected: [{ leaderId: string }]
+  leaderElected: [{ leaderId: string; port: MessagePort | null }]
   leaderResigned: [{ leaderId: string }]
 }
 
