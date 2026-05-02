@@ -14,7 +14,15 @@ export function serializeOp(op: Operation): SerializedOperation {
     query: op.query,
     variables: op.variables,
     extensions: op.extensions,
-    context: JSON.parse(JSON.stringify(op.context)),
+    context: JSON.parse(
+      JSON.stringify({
+        ...op.context,
+        fetchOptions:
+          typeof op.context.fetchOptions === 'function'
+            ? op.context.fetchOptions()
+            : op.context.fetchOptions,
+      }),
+    ),
   }
 }
 
