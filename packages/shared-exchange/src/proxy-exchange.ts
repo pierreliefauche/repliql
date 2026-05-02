@@ -1,4 +1,4 @@
-import { randomId } from '@repliql/utils'
+import { ensureOperationId, randomId } from '@repliql/utils'
 import type { Exchange, Operation, OperationResult } from '@urql/core'
 import type { Remote } from 'comlink'
 import { proxy, wrap } from 'comlink'
@@ -126,7 +126,7 @@ export function proxySharedExchange({
 
     return ops$ =>
       pipe(
-        ops$,
+        ensureOperationId(ops$),
         mergeMap((op: Operation) => {
           if (op.kind === 'teardown') {
             // Complete the result subject and clean up all state for this key

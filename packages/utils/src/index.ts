@@ -25,3 +25,4 @@ export type {
 export { mapTypeNames } from './urql/mapTypeNames'
 export { makeOperationsRegistry } from './urql/operationsRegistry'
 export type { EvictionConfig as OperationsRegistryEviction } from './urql/operationsRegistry'
+export { ensureOperationId } from './urql/ensureOperationId'

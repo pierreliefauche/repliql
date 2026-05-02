@@ -24,6 +24,7 @@ import {
   CompiledOperation,
   mapTypeNames,
   makeOperationsRegistry,
+  ensureOperationId,
 } from '@repliql/utils'
 import {
   type Operation,
@@ -173,14 +174,7 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
       }
 
       const operations$ = pipe(
-        _operations$,
-        // Add an operation id to all operations
-        map(op => {
-          if (!op.context.operationId) {
-            op.context.operationId = randomId()
-          }
-          return op
-        }),
+        ensureOperationId(_operations$),
         // Keep track of live query operations
         tap(liveQueryOperations.spy),
         share,
