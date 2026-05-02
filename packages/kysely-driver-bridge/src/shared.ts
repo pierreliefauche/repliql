@@ -1,0 +1,6 @@
+export { DriverBridge } from './DriverBridge'
+export { BridgedDriver } from './BridgedDriver'
+export { BridgedConnection } from './BridgedConnection'
+export { UnknownConnectionError, isErrorWithName } from './errors'
+export type { BridgedDriverOptions, DriverBridgeRemote } from './types'
+export { replayCreateCallbackFunction } from './replayCreateCallbackFunction'

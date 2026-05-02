@@ -1,4 +1,4 @@
-import { CircleIcon, KanbanIcon, SignOutIcon } from '@phosphor-icons/react'
+import { CircleIcon, KanbanIcon, SignOutIcon, PipeIcon, DatabaseIcon } from '@phosphor-icons/react'
 import { useMemo } from 'react'
 import { Link, useLocation } from 'wouter'
 
@@ -17,8 +17,6 @@ import {
 } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
 
-import { useLiveSelect } from '../lib/kysely'
-
 interface AppSidebarProps {
   onLogout: () => void
 }
@@ -28,15 +26,7 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
   const [currentPath] = useLocation()
   const collapsed = state === 'collapsed'
 
-  const result = useLiveSelect(db => {
-    return db
-      .selectFrom('entities')
-      .where('__typename', '=', 'Issue')
-      .where(eb => eb.ref('data', '->>').key('priority'), '=', 1 /* URGENT */)
-      .select(eb => eb.fn.countAll().as('count'))
-  })
-
-  const urgentIssuesCount = result?.[0].count
+  const urgentIssuesCount = 0
 
   const navItems = useMemo(
     () => [
@@ -46,8 +36,10 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
         icon: CircleIcon,
       },
       { title: 'Projects', url: '/projects', icon: KanbanIcon },
+      { title: 'Conduit demo', url: '/conduit', icon: PipeIcon },
+      { title: 'Kysely demo', url: '/kysely', icon: DatabaseIcon },
     ],
-    [urgentIssuesCount],
+    [],
   )
 
   return (
