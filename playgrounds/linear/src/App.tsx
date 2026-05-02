@@ -9,6 +9,7 @@ import { ProjectsView } from '@/components/ProjectsView'
 import { TokenScreen } from '@/components/TokenScreen'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { ConduitDemo } from '@/conduit-demo/ConduitDemo'
 import { createLinearClient, getApiToken, setApiToken, clearApiToken } from '@/lib/urql'
 
 import { kysely } from './lib/kysely'
@@ -47,6 +48,7 @@ const App = () => {
           <Sonner />
           <AppLayout onLogout={handleLogout}>
             <Switch>
+              <Route path="/conduit" component={ConduitDemo} />
               <Route path="/issues" component={IssuesView} nest />
               <Route path="/projects" component={ProjectsView} nest />
               <Route path="/" component={() => <Redirect to="/issues" />} />

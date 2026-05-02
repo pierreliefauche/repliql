@@ -1,4 +1,4 @@
-import { CircleIcon, KanbanIcon, SignOutIcon } from '@phosphor-icons/react'
+import { CircleIcon, KanbanIcon, SignOutIcon, PipeIcon } from '@phosphor-icons/react'
 import { useMemo } from 'react'
 import { Link, useLocation } from 'wouter'
 
@@ -46,6 +46,7 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
         icon: CircleIcon,
       },
       { title: 'Projects', url: '/projects', icon: KanbanIcon },
+      { title: 'Conduit demo', url: '/conduit', icon: PipeIcon },
     ],
     [urgentIssuesCount],
   )
