@@ -1,7 +1,8 @@
+import { heartbeat as navigatorHeartbeat } from '@repliql/utils'
 import type { Client, Exchange, ExchangeIO, Operation, OperationResult } from '@urql/core'
 import { makeSubject, pipe, subscribe } from 'wonka'
 
-import { heartbeat as navigatorHeartbeat } from './heartbeat'
+import { getHeartbeatId } from './getHeartbeatId'
 import type { Heartbeat, SerializedOperation, SerializedResult, SpokeCallbacks } from './types'
 import { deserializeOp, deserializeResult, serializeOp, serializeResult } from './utils'
 
@@ -72,7 +73,7 @@ export class SharedService {
     this.spokes.set(spokeId, { id: spokeId, callbacks, ops: new Set() })
 
     // Detect disconnection
-    this.heartbeat.onStop(spokeId, () => {
+    this.heartbeat.onStop(getHeartbeatId(spokeId), () => {
       this.disconnect(spokeId)
     })
   }

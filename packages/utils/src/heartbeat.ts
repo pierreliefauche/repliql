@@ -1,5 +1,5 @@
 /**
- * Liveness signal used by the broker to detect tab death.
+ * Liveness signal used to detect tab death.
  *
  * The default implementation is built on the [Web Locks API]: each tab holds a
  * named lock for its lifetime; the shared worker requests the same lock and
@@ -9,7 +9,7 @@
  *
  * [Web Locks API]: https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API
  */
-export type Heartbeat = {
+export interface Heartbeat {
   /**
    * Acquire the heartbeat for `id`. Resolves once the lock is held; the
    * underlying lock is released when the tab unloads.
@@ -22,10 +22,6 @@ export type Heartbeat = {
   onStop: (id: string, callback: () => void) => void
 }
 
-export function getLockName(id: string): string {
-  return `conduit-tab-${id}`
-}
-
 /**
  * Default `Heartbeat` backed by `navigator.locks`. The tab takes a lock and
  * never resolves the lock callback, so the lock is held for the tab's
@@ -33,10 +29,10 @@ export function getLockName(id: string): string {
  * implemented as a competing lock request.
  */
 export const heartbeat: Heartbeat = {
-  start: id => {
+  start: lockId => {
     return new Promise((resolve, reject) => {
       void navigator.locks
-        .request(getLockName(id), () => {
+        .request(lockId, () => {
           resolve()
           // Never resolving promise = heart beats forever (until tab dies)
           return new Promise(() => undefined)
@@ -45,8 +41,8 @@ export const heartbeat: Heartbeat = {
     })
   },
 
-  onStop: (id, callback) => {
-    void navigator.locks.request(getLockName(id), () => {
+  onStop: (lockId, callback) => {
+    void navigator.locks.request(lockId, () => {
       void callback()
       return Promise.resolve()
     })

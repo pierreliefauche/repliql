@@ -1,6 +1,6 @@
-import { randomId } from '@repliql/utils'
+import { heartbeat, randomId } from '@repliql/utils'
 
-import { heartbeat as defaultHeartbeat, type Heartbeat } from './heartbeat'
+import { getHeartbeatId } from './getHeartbeatId'
 import { CONDUIT_DEDICATED_PORT, CONDUIT_REGISTER_TAB, CONDUIT_UNREGISTER_TAB } from './protocol'
 
 export interface CreateConduitConfig {
@@ -8,11 +8,6 @@ export interface CreateConduitConfig {
   loadWorker: () => Worker
   /** Factory for the shared worker. The returned `SharedWorker` is also exposed on the handle. */
   loadSharedWorker: () => SharedWorker
-  /**
-   * Override the default Web Locks-based heartbeat. Must match the heartbeat
-   * configured in the shared worker.
-   */
-  heartbeat?: Heartbeat
 }
 
 export interface ConduitHandle {
@@ -46,7 +41,7 @@ export interface ConduitHandle {
  * broker does, picking the oldest registered tab and re-electing on death.
  */
 export function conduit(config: CreateConduitConfig): ConduitHandle {
-  const { loadSharedWorker, loadWorker, heartbeat = defaultHeartbeat } = config
+  const { loadSharedWorker, loadWorker } = config
 
   const sharedWorker = loadSharedWorker()
   const dedicatedWorker = loadWorker()
@@ -54,7 +49,7 @@ export function conduit(config: CreateConduitConfig): ConduitHandle {
   const tabId = randomId()
 
   const registerPromise = (async () => {
-    await heartbeat.start(tabId)
+    await heartbeat.start(getHeartbeatId(tabId))
     sharedWorker.port.start()
 
     const channel = new MessageChannel()

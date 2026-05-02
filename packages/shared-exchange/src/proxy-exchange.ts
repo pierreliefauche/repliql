@@ -1,10 +1,10 @@
-import { ensureOperationId, randomId } from '@repliql/utils'
+import { ensureOperationId, randomId, heartbeat as navigatorHeartbeat } from '@repliql/utils'
 import type { Exchange, Operation, OperationResult } from '@urql/core'
 import type { Remote } from 'comlink'
 import { proxy, wrap } from 'comlink'
 import { empty, makeSubject, mergeMap, pipe, subscribe } from 'wonka'
 
-import { heartbeat as navigatorHeartbeat } from './heartbeat'
+import { getHeartbeatId } from './getHeartbeatId'
 import type { SharedService } from './shared-service'
 import type { EndpointConfig, Heartbeat, SerializedOperation, SerializedResult } from './types'
 import { deserializeOp, deserializeResult, serializeOp, serializeResult } from './utils'
@@ -84,7 +84,7 @@ export function proxySharedExchange({
               }),
             )
 
-            await heartbeat.start(spokeId)
+            await heartbeat.start(getHeartbeatId(spokeId))
 
             await hub.connect(
               spokeId,

@@ -2,16 +2,7 @@ import type { Remote } from 'comlink'
 
 import { Broker } from './Broker'
 import { ConduitEventEmitter } from './events'
-import { type Heartbeat } from './heartbeat'
 import { isRegisterTabMessage, isUnregisterTabMessage } from './protocol'
-
-export interface SharedConduitConfig {
-  /**
-   * Override the default Web Locks-based heartbeat. Useful for tests or
-   * environments without `navigator.locks`.
-   */
-  heartbeat?: Heartbeat
-}
 
 type OnConnectTabCallback = (port: MessagePort) => void
 
@@ -31,11 +22,9 @@ type OnConnectTabCallback = (port: MessagePort) => void
  * - `onConnectTab(cb)` — register a callback fired with each tab's port, e.g.
  *   to `Comlink.expose` a service to that tab.
  */
-export function conduit(config: SharedConduitConfig = {}) {
-  const { heartbeat } = config
-
+export function conduit() {
   const events = new ConduitEventEmitter()
-  const broker = new Broker(events, heartbeat)
+  const broker = new Broker(events)
   const connectTabCallbacks = new Set<OnConnectTabCallback>()
 
   ;(self as unknown as SharedWorkerGlobalScope).addEventListener('connect', ({ ports }) => {

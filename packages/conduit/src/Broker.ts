@@ -1,8 +1,8 @@
-import type { Remote } from 'comlink'
-import { wrap } from 'comlink'
+import { heartbeat } from '@repliql/utils'
+import { wrap, type Remote } from 'comlink'
 
 import { ConduitEventEmitter } from './events'
-import { heartbeat as defaultHeartbeat, type Heartbeat } from './heartbeat'
+import { getHeartbeatId } from './getHeartbeatId'
 import { CONDUIT_ELECTED_LEADER, LeaderResignedError } from './protocol'
 
 interface TabEntry<T> {
@@ -23,16 +23,14 @@ type Dispatch<T> = (leaderId: string, remote: Remote<T>) => void
  * when the leader dies mid-call. The next leader is the *youngest* tab.
  */
 export class Broker<T> {
-  private readonly heartbeat: Heartbeat
   private readonly tabs = new Map<string, TabEntry<T>>()
   private currentLeaderId: string | null = null
   private readonly pendingDispatches: Dispatch<T>[] = []
   private readonly inflightByLeader = new Map<string, Set<() => void>>()
   public readonly events: ConduitEventEmitter
 
-  constructor(events: ConduitEventEmitter, heartbeat: Heartbeat = defaultHeartbeat) {
+  constructor(events: ConduitEventEmitter) {
     this.events = events
-    this.heartbeat = heartbeat
   }
 
   /**
@@ -61,7 +59,7 @@ export class Broker<T> {
 
     this.tabs.set(tabId, { remote, port, registeredAt: Date.now() })
 
-    this.heartbeat.onStop(tabId, () => {
+    heartbeat.onStop(getHeartbeatId(tabId), () => {
       this._removeTab(tabId)
     })
 

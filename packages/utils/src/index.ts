@@ -7,6 +7,8 @@ export { SourceMap } from './SourceMap'
 export { randomId } from './randomId'
 export { areEqual } from './areEqual'
 export { EventEmitter } from './EventEmitter'
+export { heartbeat } from './heartbeat'
+export type { Heartbeat } from './heartbeat'
 
 // GraphQL
 
