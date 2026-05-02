@@ -1,8 +1,8 @@
-import { ReactiveKyselyProvider } from '@repliql/reactive-kysely/react'
 import { useState, useMemo } from 'react'
 import { Provider as UrqlProvider } from 'urql'
 import { Route, Switch, Redirect } from 'wouter'
 
+import { BridgedKyselyDemo } from '@/bridged-kysely-demo/BridgedKyselyDemo'
 import { AppLayout } from '@/components/AppLayout'
 import { IssuesView } from '@/components/IssuesView'
 import { ProjectsView } from '@/components/ProjectsView'
@@ -11,8 +11,6 @@ import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ConduitDemo } from '@/conduit-demo/ConduitDemo'
 import { createLinearClient, getApiToken, setApiToken, clearApiToken } from '@/lib/urql'
-
-import { kysely } from './lib/kysely'
 
 const App = () => {
   const [token, setToken] = useState<string | null>(getApiToken)
@@ -42,22 +40,21 @@ const App = () => {
   }
 
   return (
-    <ReactiveKyselyProvider value={kysely}>
-      <UrqlProvider value={client}>
-        <TooltipProvider>
-          <Sonner />
-          <AppLayout onLogout={handleLogout}>
-            <Switch>
-              <Route path="/conduit" component={ConduitDemo} />
-              <Route path="/issues" component={IssuesView} nest />
-              <Route path="/projects" component={ProjectsView} nest />
-              <Route path="/" component={() => <Redirect to="/issues" />} />
-              <Route component={() => <Redirect to="/" />} />
-            </Switch>
-          </AppLayout>
-        </TooltipProvider>
-      </UrqlProvider>
-    </ReactiveKyselyProvider>
+    <UrqlProvider value={client}>
+      <TooltipProvider>
+        <Sonner />
+        <AppLayout onLogout={handleLogout}>
+          <Switch>
+            <Route path="/kysely" component={BridgedKyselyDemo} />
+            <Route path="/conduit" component={ConduitDemo} />
+            <Route path="/issues" component={IssuesView} nest />
+            <Route path="/projects" component={ProjectsView} nest />
+            <Route path="/" component={() => <Redirect to="/issues" />} />
+            <Route component={() => <Redirect to="/" />} />
+          </Switch>
+        </AppLayout>
+      </TooltipProvider>
+    </UrqlProvider>
   )
 }
 
