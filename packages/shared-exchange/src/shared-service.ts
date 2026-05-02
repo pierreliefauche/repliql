@@ -11,6 +11,7 @@ export interface SharedServiceConfig {
 }
 
 interface SpokeState {
+  id: string
   callbacks: SpokeCallbacks
   /** Operation keys currently active from this spoke. */
   ops: Set<number>
@@ -68,7 +69,7 @@ export class SharedService {
 
   /** Register a new spoke connection. Called by the spoke via Comlink. */
   connect(spokeId: string, callbacks: SpokeCallbacks): void {
-    this.spokes.set(spokeId, { callbacks, ops: new Set() })
+    this.spokes.set(spokeId, { id: spokeId, callbacks, ops: new Set() })
 
     // Detect disconnection
     this.heartbeat.onStop(spokeId, () => {
