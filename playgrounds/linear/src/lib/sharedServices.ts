@@ -1,5 +1,5 @@
 import { conduit } from '@repliql/conduit/tab'
-import type { DriverBridgeRemote } from '@repliql/kysely-driver-bridge/shared'
+import type { DriverBridgeRemote } from '@repliql/kysely-driver-bridge/tab'
 import type { SharedExchange } from '@repliql/shared-exchange/tab'
 import { wrapSharedServices, type SharedServicesConnector } from '@repliql/shared-service/tab'
 import { wrap } from 'comlink'
@@ -16,7 +16,7 @@ const { sharedWorker } = conduit({
       name: 'linear-repliql',
     }),
   logger: {
-    level: 'error',
+    level: 'warn',
     ...console,
   },
 })
@@ -29,6 +29,6 @@ export const sharedServices = wrapSharedServices<{
 }>(sharedServicesConnector, {
   logger: {
     ...console,
-    level: 'debug',
+    level: 'warn',
   },
 })

@@ -1,6 +1,6 @@
 import { fastCacheExchange } from '@repliql/repliql'
 import { proxySharedExchange } from '@repliql/shared-exchange/tab'
-import { createClient, fetchExchange } from 'urql'
+import { createClient, fetchExchange, mapExchange } from 'urql'
 
 import { sharedServices } from './sharedServices'
 
@@ -29,14 +29,18 @@ export function createLinearClient(token: string) {
         },
       }),
       proxySharedExchange({ sharedExchange: sharedServices.sharedExchange }),
+      mapExchange({
+        onOperation(op) {
+          op.context.fetchOptions = () => ({
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: token,
+            },
+          })
+        },
+      }),
       fetchExchange,
     ],
     preferGetMethod: false,
-    fetchOptions: () => ({
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: token,
-      },
-    }),
   })
 }

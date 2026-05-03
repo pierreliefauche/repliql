@@ -15,7 +15,7 @@ import { resolvers } from './resolvers'
 
 const { wrapDedicatedWorker, onConnectTab, events } = conduit({
   logger: {
-    level: 'error',
+    level: 'warn',
     ...console,
   },
 })
@@ -50,7 +50,7 @@ const sharedServices = new SharedServicesManager({
   },
   logger: {
     ...console,
-    level: 'debug',
+    level: 'warn',
   },
 })
 
