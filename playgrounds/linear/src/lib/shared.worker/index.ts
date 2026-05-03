@@ -6,7 +6,8 @@ import {
 } from '@repliql/kysely-driver-bridge/shared'
 import { ReactiveKysely } from '@repliql/reactive-kysely'
 import { repliqlExchange, type DatabaseSchema } from '@repliql/repliql'
-import { SharedService } from '@repliql/shared-exchange'
+import { SharedExchangeService } from '@repliql/shared-exchange/shared'
+import { SharedServicesManager } from '@repliql/shared-service/shared'
 import { expose } from 'comlink'
 import { SqliteAdapter, SqliteIntrospector, SqliteQueryCompiler } from 'kysely'
 
@@ -19,12 +20,12 @@ const { wrapDedicatedWorker, onConnectTab, events } = conduit({
   },
 })
 
-const remoteBridge = wrapDedicatedWorker<DriverBridgeRemote>()
+const remoteBridge = wrapDedicatedWorker<DriverBridgeRemote>() as DriverBridgeRemote
 const createCallbackFunction = replayCreateCallbackFunction({ events })
 
 const kysely = new ReactiveKysely<DatabaseSchema>({
   dialect: {
-    createDriver: () => new BridgedDriver(remoteBridge as DriverBridgeRemote),
+    createDriver: () => new BridgedDriver(remoteBridge),
     createAdapter: () => new SqliteAdapter(),
     createIntrospector: db => new SqliteIntrospector(db),
     createQueryCompiler: () => new SqliteQueryCompiler(),
@@ -38,11 +39,21 @@ const repliql = repliqlExchange({
   resolvers,
 })
 
-// Create the exchange (cache, logging, auth, or any custom exchange)
-const sharedService = new SharedService({
-  exchange: repliql,
+const sharedServices = new SharedServicesManager({
+  services: {
+    kyselyDriverBridge: {
+      onConnectTab() {
+        return remoteBridge
+      },
+    },
+    sharedExchange: new SharedExchangeService({ exchange: repliql }),
+  },
+  logger: {
+    ...console,
+    level: 'debug',
+  },
 })
 
 onConnectTab(port => {
-  expose(sharedService, port)
+  expose(sharedServices.connector, port)
 })

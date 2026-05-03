@@ -36,10 +36,9 @@ export interface SpokeCallbacks {
   onReexecute: (op: SerializedOperation) => void
 }
 
-/** Config type for functions that accept a raw MessagePort endpoint. */
-export type EndpointConfig = { endpoint: MessagePort; heartbeat?: Heartbeat }
-
-export type Heartbeat = {
-  start: (id: string) => Promise<void>
-  onStop: (id: string, callback: () => void) => void
+export type SharedExchange = {
+  register(callbacks: SpokeCallbacks): void
+  executeOperation(serialized: SerializedOperation): void
+  teardownOperation(handle: OperationHandle): void
+  resolveForwarded(handle: OperationHandle, result: SerializedResult): void
 }

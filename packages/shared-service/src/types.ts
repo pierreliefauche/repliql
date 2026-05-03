@@ -28,10 +28,12 @@ export interface SharedServicesConnector {
   connect: (tabId: string) => void
 }
 
+export type RemoteService<Service> = Remote<Service>
+
 /**
  * Spoke-side view of the registered services. Each method returns a Promise
  * because calls cross a Comlink boundary.
  */
 export type RemoteServices<TServices extends Record<string, Service>> = {
-  [K in keyof TServices]: Remote<TServices[K]>
+  [K in keyof TServices]: RemoteService<TServices[K]>
 }

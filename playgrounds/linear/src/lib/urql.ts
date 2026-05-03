@@ -1,29 +1,10 @@
-import { conduit } from '@repliql/conduit/tab'
 import { fastCacheExchange } from '@repliql/repliql'
-import { proxySharedExchange, proxySharedService } from '@repliql/shared-exchange'
+import { proxySharedExchange } from '@repliql/shared-exchange/tab'
 import { createClient, fetchExchange } from 'urql'
 
+import { sharedServices } from './sharedServices'
+
 const LINEAR_API_URL = 'https://api.linear.app/graphql'
-
-const { sharedWorker } = conduit({
-  loadWorker: () =>
-    new Worker(new URL('./dedicated.worker/index.ts', import.meta.url), {
-      type: 'module',
-      name: 'linear-sqlite',
-    }),
-  loadSharedWorker: () =>
-    new SharedWorker(new URL('./shared.worker/index.ts', import.meta.url), {
-      type: 'module',
-      name: 'linear-repliql',
-    }),
-  logger: {
-    level: 'error',
-    ...console,
-  },
-})
-
-const sharedService = proxySharedService({ endpoint: sharedWorker.port })
-const sharedExchange = proxySharedExchange({ sharedService })
 
 export function getApiToken(): string | null {
   return localStorage.getItem('linear-api-token')
@@ -47,7 +28,7 @@ export function createLinearClient(token: string) {
           size: 100,
         },
       }),
-      sharedExchange,
+      proxySharedExchange({ sharedExchange: sharedServices.sharedExchange }),
       fetchExchange,
     ],
     preferGetMethod: false,

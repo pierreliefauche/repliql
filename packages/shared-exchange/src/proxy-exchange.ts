@@ -1,40 +1,13 @@
-import {
-  ensureOperationId,
-  randomId,
-  heartbeat as navigatorHeartbeat,
-  getOperationHandle,
-  type OperationHandle,
-} from '@repliql/utils'
+import { ensureOperationId, getOperationHandle, type OperationHandle } from '@repliql/utils'
 import type { Exchange, Operation, OperationResult } from '@urql/core'
 import type { Remote } from 'comlink'
-import { proxy, wrap } from 'comlink'
+import { proxy } from 'comlink'
 import { empty, makeSubject, mergeMap, pipe, subscribe } from 'wonka'
 
-import { getHeartbeatId } from './getHeartbeatId'
-import type { SharedService } from './shared-service'
-import type { EndpointConfig, Heartbeat, SerializedOperation, SerializedResult } from './types'
+import type { SerializedOperation, SerializedResult, SharedExchange } from './types'
 import { deserializeOp, deserializeResult, serializeOp, serializeResult } from './utils'
 
-type ProxySharedExchangeConfig = { heartbeat?: Heartbeat } & (
-  | { sharedService: Remote<SharedService> }
-  | EndpointConfig
-)
-
-/**
- * Creates a Comlink proxy to the hub SharedService from a raw MessagePort.
- * Use when you need to call custom methods on an extended SharedService in addition
- * to using the shared exchange.
- *
- * @example
- * const worker = new SharedWorker('worker.js')
- * const sharedService = proxySharedService({ endpoint: worker.port })
- * sharedService.resetCache()  // custom method on extended SharedService
- */
-export function proxySharedService<T extends SharedService = SharedService>(
-  config: EndpointConfig,
-): Remote<T> {
-  return wrap<T>(config.endpoint)
-}
+type ProxySharedExchangeConfig = { sharedExchange: Remote<SharedExchange> }
 
 /**
  * Creates a URQL exchange that proxies operations through the hub SharedService.
@@ -44,19 +17,8 @@ export function proxySharedService<T extends SharedService = SharedService>(
  * - `{ endpoint: worker.port }` — wraps the port in a Comlink proxy automatically
  * - `{ sharedService }` — reuses an existing proxy (e.g. from proxySharedService)
  */
-export function proxySharedExchange({
-  heartbeat: _heartbeat,
-  ...config
-}: ProxySharedExchangeConfig): Exchange {
+export function proxySharedExchange({ sharedExchange: hub }: ProxySharedExchangeConfig): Exchange {
   return ({ client, forward }) => {
-    // Default to browser heartbeat
-    const heartbeat = _heartbeat || navigatorHeartbeat
-
-    const hub: Remote<SharedService> =
-      'sharedService' in config ? config.sharedService : wrap(config.endpoint)
-
-    const spokeId = randomId()
-
     // Maps operation handle → Subject used to push hub results into the URQL stream.
     const resultSubjects = new Map<
       OperationHandle,
@@ -87,17 +49,13 @@ export function proxySharedExchange({
               forward,
               subscribe((result: OperationResult) => {
                 void hub.resolveForwarded(
-                  spokeId,
                   getOperationHandle(result.operation),
                   serializeResult(result),
                 )
               }),
             )
 
-            await heartbeat.start(getHeartbeatId(spokeId))
-
-            await hub.connect(
-              spokeId,
+            await hub.register(
               proxy({
                 onResult(result: SerializedResult): void {
                   const op = pendingOps.get(result.handle)
@@ -146,7 +104,7 @@ export function proxySharedExchange({
             resultSubjects.get(handle)?.complete()
             resultSubjects.delete(handle)
             pendingOps.delete(handle)
-            void ensureConnected().then(() => hub.teardownOperation(spokeId, handle))
+            void ensureConnected().then(() => hub.teardownOperation(handle))
             return empty
           }
 
@@ -159,7 +117,7 @@ export function proxySharedExchange({
           })
           pendingOps.set(handle, op)
 
-          void ensureConnected().then(() => hub.executeOperation(spokeId, serializeOp(op)))
+          void ensureConnected().then(() => hub.executeOperation(serializeOp(op)))
           return subject.source
         }),
       )

@@ -1,12 +1,11 @@
-import { conduit } from '@repliql/conduit/tab'
 import { BridgedDriver, type DriverBridgeRemote } from '@repliql/kysely-driver-bridge/shared'
-import { wrap } from 'comlink'
 import { Kysely, sql, SqliteAdapter, SqliteIntrospector, SqliteQueryCompiler } from 'kysely'
 import { useEffect, useState } from 'react'
 
+import { sharedServices } from '../lib/sharedServices'
+
 interface Handle {
   db: Kysely<any>
-  tabId: string
 }
 
 let cached: Handle | null = null
@@ -16,26 +15,10 @@ function getHandle(): Handle {
     return cached
   }
 
-  const dedicated = new Worker(new URL('./dedicated.worker.ts', import.meta.url), {
-    type: 'module',
-    name: 'bridged-kysely-demo-dedicated',
-  })
-
-  const shared = new SharedWorker(new URL('./shared.worker.ts', import.meta.url), {
-    type: 'module',
-    name: 'bridged-kysely-demo-shared',
-  })
-
-  const { tabId, sharedWorker } = conduit({
-    loadWorker: () => dedicated,
-    loadSharedWorker: () => shared,
-  })
-
-  const remoteBridge = wrap<DriverBridgeRemote>(sharedWorker.port)
-
   const db = new Kysely({
     dialect: {
-      createDriver: () => new BridgedDriver(remoteBridge as DriverBridgeRemote),
+      createDriver: () =>
+        new BridgedDriver(sharedServices.kyselyDriverBridge as DriverBridgeRemote),
       createAdapter: () => new SqliteAdapter(),
       createIntrospector: db => new SqliteIntrospector(db),
       createQueryCompiler: () => new SqliteQueryCompiler(),
@@ -44,14 +27,12 @@ function getHandle(): Handle {
 
   cached = {
     db,
-    tabId,
   }
 
   return cached
 }
 
 export function BridgedKyselyDemo() {
-  const [tabId, setTabId] = useState<string>('')
   const [db, setDb] = useState<Kysely<any>>()
   const [query, setQuery] = useState<string>('SELECT * FROM sqlite_master')
   const [results, setResults] = useState<Record<string, unknown>[]>([])
@@ -60,7 +41,6 @@ export function BridgedKyselyDemo() {
 
   useEffect(() => {
     const handle = getHandle()
-    setTabId(handle.tabId)
     setDb(handle.db)
   }, [])
 
@@ -97,9 +77,6 @@ export function BridgedKyselyDemo() {
         SQLite is running in tabs' dedicated workers. A single dedicated worker is actively
         interacting with SQLite with a shared worker as broker to elect leader. Queries from tab
         flow through shared worker to the elected dedicated worker.
-      </p>
-      <p style={{ color: '#888', fontSize: 13 }}>
-        this tab id: <code>{tabId}</code>
       </p>
 
       <div style={{ marginTop: 24 }}>
@@ -210,7 +187,7 @@ export function BridgedKyselyDemo() {
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
                         }}
-                        title={String(row[col] ?? '')}
+                        title={format(row[col])}
                       >
                         {row[col] === null ? (
                           <span style={{ color: '#999', fontStyle: 'italic' }}>NULL</span>
@@ -234,4 +211,15 @@ export function BridgedKyselyDemo() {
       )}
     </div>
   )
+}
+
+function format(data: unknown): string {
+  if (typeof data !== 'string') {
+    return JSON.stringify(data, null, 2)
+  }
+  try {
+    return JSON.stringify(JSON.parse(data), null, 2)
+  } catch {
+    return String(data)
+  }
 }

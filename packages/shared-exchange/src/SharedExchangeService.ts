@@ -1,18 +1,13 @@
-import {
-  heartbeat as navigatorHeartbeat,
-  type OperationHandle,
-  getOperationHandle,
-} from '@repliql/utils'
+import type { SharedService } from '@repliql/shared-service/shared'
+import { type OperationHandle, getOperationHandle } from '@repliql/utils'
 import type { Client, Exchange, ExchangeIO, Operation, OperationResult } from '@urql/core'
 import { makeSubject, pipe, publish, subscribe, tap } from 'wonka'
 
-import { getHeartbeatId } from './getHeartbeatId'
-import type { Heartbeat, SerializedOperation, SerializedResult, SpokeCallbacks } from './types'
+import type { SerializedOperation, SerializedResult, SharedExchange, SpokeCallbacks } from './types'
 import { deserializeOp, deserializeResult, serializeOp, serializeResult } from './utils'
 
-export interface SharedServiceConfig {
+export interface SharedExchangeServiceConfig {
   exchange: Exchange
-  heartbeat?: Heartbeat
 }
 
 interface SpokeState {
@@ -22,9 +17,7 @@ interface SpokeState {
   ops: Set<OperationHandle>
 }
 
-export class SharedService {
-  private readonly heartbeat: Heartbeat
-
+export class SharedExchangeService implements SharedService<SharedExchange> {
   /** The wrapped exchange. Assignable to allow hot-swapping (re-execution semantics: TODO). */
   exchange: Exchange
 
@@ -48,17 +41,7 @@ export class SharedService {
   private readonly operationSubject: ReturnType<typeof makeSubject<Operation>>
   private readonly fakeClient: Client
 
-  constructor({ exchange, heartbeat: _heartbeat }: SharedServiceConfig) {
-    if (_heartbeat) {
-      this.heartbeat = _heartbeat
-    } else if (typeof navigator !== 'undefined' && typeof navigator.locks !== 'undefined') {
-      this.heartbeat = navigatorHeartbeat
-    } else {
-      throw new Error(
-        'SharedService requires a heartbeat in environments without navigator.locks. Pass SharedServiceConfig.heartbeat explicitly.',
-      )
-    }
-
+  constructor({ exchange }: SharedExchangeServiceConfig) {
     this.exchange = exchange
     this.spokes = new Map()
     this.operationSubscribers = new Map()
@@ -72,22 +55,24 @@ export class SharedService {
     this._initExchange()
   }
 
-  private getFallbackSpoke(): SpokeState | undefined {
-    return this.spokes.values().next().value
+  public onConnectTab(spokeId: string): SharedExchange {
+    return {
+      register: callbacks => {
+        this.spokes.set(spokeId, { id: spokeId, callbacks, ops: new Set() })
+      },
+      executeOperation: serialized => {
+        return this.executeOperation(spokeId, serialized)
+      },
+      teardownOperation: handle => {
+        return this.teardownOperation(spokeId, handle)
+      },
+      resolveForwarded: (handle, result) => {
+        return this.resolveForwarded(spokeId, handle, result)
+      },
+    }
   }
 
-  /** Register a new spoke connection. Called by the spoke via Comlink. */
-  connect(spokeId: string, callbacks: SpokeCallbacks): void {
-    this.spokes.set(spokeId, { id: spokeId, callbacks, ops: new Set() })
-
-    // Detect disconnection
-    this.heartbeat.onStop(getHeartbeatId(spokeId), () => {
-      this.disconnect(spokeId)
-    })
-  }
-
-  /** Unregister a spoke, tearing down all its active operations. */
-  disconnect(spokeId: string): void {
+  public onDisconnectTab(spokeId: string) {
     const spoke = this.spokes.get(spokeId)
     if (!spoke) return
     for (const handle of [...spoke.ops]) {
@@ -96,13 +81,17 @@ export class SharedService {
     this.spokes.delete(spokeId)
   }
 
+  private getFallbackSpoke(): SpokeState | undefined {
+    return this.spokes.values().next().value
+  }
+
   /**
    * Called by a spoke to push an operation into the shared exchange pipeline.
    * Subscriptions are deduplicated: if the same key is already active, the spoke
    * is registered as a subscriber and will receive future results via broadcast.
    * Queries and mutations always execute separately (not deduplicated).
    */
-  executeOperation(spokeId: string, serialized: SerializedOperation): void {
+  private executeOperation(spokeId: string, serialized: SerializedOperation): void {
     const op = deserializeOp(serialized)
     const handle = getOperationHandle(op)
 
@@ -135,7 +124,7 @@ export class SharedService {
    * For subscriptions: if the spoke being torn down was handling the forward and other
    * spokes are still subscribed, the subscription is handed off to another spoke.
    */
-  teardownOperation(spokeId: string, handle: OperationHandle): void {
+  private teardownOperation(spokeId: string, handle: OperationHandle): void {
     const subscribers = this.operationSubscribers.get(handle)
     subscribers?.delete(spokeId)
     this.spokes.get(spokeId)?.ops.delete(handle)
@@ -181,7 +170,11 @@ export class SharedService {
    * operation the hub forwarded via onForward. Injects the result into the hub's
    * forward stream so the wrapped exchange (e.g. cacheExchange) can process it.
    */
-  resolveForwarded(_spokeId: string, handle: OperationHandle, result: SerializedResult): void {
+  private resolveForwarded(
+    _spokeId: string,
+    handle: OperationHandle,
+    result: SerializedResult,
+  ): void {
     this.pendingForwards.get(handle)?.(result)
   }
 
