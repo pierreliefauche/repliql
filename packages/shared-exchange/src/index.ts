@@ -1,5 +1,4 @@
 export { SharedService } from './shared-service'
-export { exposeSharedService } from './expose'
 export { proxySharedExchange, proxySharedService } from './proxy-exchange'
 export type {
   EndpointConfig,
