@@ -1,7 +1,9 @@
-import { Entity, EntityRef } from '@repliql/utils'
-import type { ColumnType, GeneratedAlways } from 'kysely'
+import type { Entity, EntityRef } from '@repliql/utils'
+import type { Operation } from '@urql/core'
+import type { ColumnType, GeneratedAlways, JSONColumnType } from 'kysely'
 
-type ReadOnly<T> = ColumnType<T, T, never>
+type ReadOnly<T> =
+  T extends ColumnType<infer S, infer I, any> ? ColumnType<S, I, never> : ColumnType<T, T, never>
 
 type Timestamp = ColumnType<Date, Date | string, Date | string>
 
@@ -24,8 +26,8 @@ export type EntitiesTable = {
   __typename: string
   id: ReadOnly<string>
   __ref: EntityRef
-  data: ColumnType<Entity, string, string>
-  base: null | ColumnType<Entity, string, string>
+  data: JSONColumnType<Entity>
+  base: null | JSONColumnType<Entity>
   updatedByOperationKey: number | null
   $createdAt: GeneratedAlways<Timestamp>
   $updatedAt: Timestamp
@@ -43,7 +45,9 @@ export type MutationsTable = {
   id: ReadOnly<string>
   name: ReadOnly<string | null>
   query: ReadOnly<string>
-  params: ColumnType<Record<string, unknown>, string, never>
+  variables: ReadOnly<JSONColumnType<NonNullable<Operation['variables']>>>
+  context: ReadOnly<JSONColumnType<Operation['context']>>
+  extensions: ReadOnly<JSONColumnType<NonNullable<Operation['extensions']>>>
   status: MutationStatus
   $createdAt: GeneratedAlways<Timestamp>
   $updatedAt: Timestamp
@@ -52,7 +56,7 @@ export type MutationsTable = {
 export type MutationPatchesTable = {
   mutationId: MutationsTable['id']
   entityRef: EntitiesTable['__ref']
-  patch: ColumnType<Record<string, unknown>, string, string>
+  patch: JSONColumnType<Record<string, unknown>>
   $createdAt: GeneratedAlways<Timestamp>
   $updatedAt: Timestamp
 }

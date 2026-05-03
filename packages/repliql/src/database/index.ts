@@ -228,10 +228,12 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
     id: string
     name: string | null
     query: string
-    params: Record<string, unknown>
+    variables: Record<string, unknown>
+    extensions: Record<string, unknown>
+    context: Record<string, unknown>
     status: MutationStatus
   }) {
-    const { id, name, query, params, status } = args
+    const { id, name, query, variables, extensions, context, status } = args
 
     const mutation = await this.client
       .insertInto('mutations')
@@ -240,7 +242,9 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
           id,
           name,
           query,
-          params: toJsonbPreserveNulls(params),
+          variables: JSON.stringify(variables),
+          extensions: JSON.stringify(extensions),
+          context: JSON.stringify(context),
           status,
           $updatedAt: new Date().toISOString(),
         },
