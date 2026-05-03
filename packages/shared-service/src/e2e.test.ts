@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+
 import type { Remote } from 'comlink'
 
 import { SharedServicesManager } from './SharedServicesManager'

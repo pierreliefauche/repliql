@@ -425,11 +425,7 @@ describe('matchTable merging', () => {
     sub = matchTable(sub, 'users', { id: { $in: [2] } })
     sub = matchTable(sub, 'users', { id: { $in: [3] } })
     expect(sub.filter).toEqual({
-      users: [
-        { id: { $in: [1] } },
-        { id: { $in: [2] } },
-        { id: { $in: [3] } },
-      ],
+      users: [{ id: { $in: [1] } }, { id: { $in: [2] } }, { id: { $in: [3] } }],
     })
   })
 

@@ -337,7 +337,9 @@ describe('execute', () => {
         fragment UserFields on User { id name }
       `)
       const compiled = compile(doc)
-      const hasSpread = (set: { selections: readonly { kind: string; selectionSet?: any }[] }): boolean =>
+      const hasSpread = (set: {
+        selections: readonly { kind: string; selectionSet?: any }[]
+      }): boolean =>
         set.selections.some(s => {
           if (s.kind === 'FragmentSpread') return true
           if (s.selectionSet) return hasSpread(s.selectionSet)

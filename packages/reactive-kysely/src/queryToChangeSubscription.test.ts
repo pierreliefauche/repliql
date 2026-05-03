@@ -930,11 +930,7 @@ const tests: TestCase[] = [
     query: db
       .selectFrom('users')
       .select('id')
-      .where(
-        eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'),
-        '=',
-        42,
-      ),
+      .where(eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'), '=', 42),
     result: {
       selection: { users: { id: true } },
       filter: {
@@ -947,11 +943,7 @@ const tests: TestCase[] = [
     query: db
       .selectFrom('users')
       .select('id')
-      .where(
-        eb => eb.ref('metadata', '->').key('nested').key('deep').key('label'),
-        '!=',
-        'x',
-      ),
+      .where(eb => eb.ref('metadata', '->').key('nested').key('deep').key('label'), '!=', 'x'),
     result: {
       selection: { users: { id: true } },
       filter: {
@@ -964,11 +956,7 @@ const tests: TestCase[] = [
     query: db
       .selectFrom('users')
       .select('id')
-      .where(
-        eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'),
-        '>',
-        0,
-      ),
+      .where(eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'), '>', 0),
     result: {
       selection: { users: { id: true } },
       filter: {
@@ -981,16 +969,8 @@ const tests: TestCase[] = [
     query: db
       .selectFrom('users')
       .select('id')
-      .where(
-        eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'),
-        '=',
-        1,
-      )
-      .where(
-        eb => eb.ref('metadata', '->').key('nested').key('deep').key('label'),
-        '=',
-        'a',
-      ),
+      .where(eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'), '=', 1)
+      .where(eb => eb.ref('metadata', '->').key('nested').key('deep').key('label'), '=', 'a'),
     result: {
       selection: { users: { id: true } },
       filter: {
@@ -1015,11 +995,7 @@ const tests: TestCase[] = [
       .selectFrom('users')
       .select('id')
       .where(eb => eb.ref('metadata', '->').key('timestamps').key('createdAt'), '=', 7)
-      .where(
-        eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'),
-        '=',
-        42,
-      ),
+      .where(eb => eb.ref('metadata', '->').key('nested').key('deep').key('value'), '=', 42),
     result: {
       selection: { users: { id: true } },
       filter: {
