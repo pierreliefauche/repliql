@@ -35,10 +35,10 @@
   "scripts": {
     "build": "bun run build:bundles && bun run build:types",
     "build:bundles": "bun run build:index && bun run build:dedicated && bun run build:shared && bun run build:tab",
-    "build:dedicated": "bun build ./src/dedicated.ts --outfile ./dist/dedicated.mjs --format esm --minify && bun build ./src/dedicated.ts --outfile ./dist/dedicated.cjs --format cjs --minify",
-    "build:index": "bun build ./src/index.ts --outfile ./dist/index.mjs --format esm --minify && bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify",
-    "build:shared": "bun build ./src/shared.ts --outfile ./dist/shared.mjs --format esm --minify && bun build ./src/shared.ts --outfile ./dist/shared.cjs --format cjs --minify",
-    "build:tab": "bun build ./src/tab.ts --outfile ./dist/tab.mjs --format esm --minify && bun build ./src/tab.ts --outfile ./dist/tab.cjs --format cjs --minify",
+    "build:dedicated": "bun build ./src/dedicated.ts --outfile ./dist/dedicated.mjs --format esm --minify --external comlink && bun build ./src/dedicated.ts --outfile ./dist/dedicated.cjs --format cjs --minify --external comlink",
+    "build:index": "bun build ./src/index.ts --outfile ./dist/index.mjs --format esm --minify --external comlink && bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify --external comlink",
+    "build:shared": "bun build ./src/shared.ts --outfile ./dist/shared.mjs --format esm --minify --external comlink && bun build ./src/shared.ts --outfile ./dist/shared.cjs --format cjs --minify --external comlink",
+    "build:tab": "bun build ./src/tab.ts --outfile ./dist/tab.mjs --format esm --minify --external comlink && bun build ./src/tab.ts --outfile ./dist/tab.cjs --format cjs --minify --external comlink",
     "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap",
     "fmt": "oxfmt --write src",
     "lint": "oxlint src",
@@ -46,10 +46,12 @@
     "test:watch": "bun test ./src/**/*.test.ts ./src/*.test.ts --watch"
   },
   "dependencies": {
-    "@repliql/utils": "workspace:*",
-    "comlink": "catalog:"
+    "@repliql/utils": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "comlink": "catalog:"
   }
 }

@@ -19,10 +19,12 @@
       "version": "0.0.1",
       "dependencies": {
         "@repliql/utils": "workspace:*",
-        "comlink": "catalog:",
       },
       "devDependencies": {
         "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "comlink": "catalog:",
       },
     },
     "packages/kysely-driver-bridge": {
@@ -31,13 +33,13 @@
       "dependencies": {
         "@repliql/conduit": "workspace:*",
         "@repliql/utils": "workspace:*",
-        "comlink": "catalog:",
       },
       "devDependencies": {
         "node-sqlite3-wasm": "^0.8.56",
         "typescript": "catalog:",
       },
       "peerDependencies": {
+        "comlink": "catalog:",
         "kysely": "catalog:",
       },
     },
@@ -79,7 +81,7 @@
       "name": "@repliql/shared-exchange",
       "version": "0.0.1",
       "dependencies": {
-        "comlink": "^4.4.2",
+        "@repliql/shared-service": "workspace:*",
       },
       "devDependencies": {
         "@repliql/utils": "workspace:*",
@@ -89,6 +91,7 @@
       },
       "peerDependencies": {
         "@urql/core": ">=5.0.0",
+        "comlink": ">=4.0.0",
         "wonka": ">=6.0.0",
       },
     },
