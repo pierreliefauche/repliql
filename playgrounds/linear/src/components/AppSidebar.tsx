@@ -1,4 +1,11 @@
-import { CircleIcon, KanbanIcon, SignOutIcon, PipeIcon, DatabaseIcon } from '@phosphor-icons/react'
+import {
+  CircleIcon,
+  KanbanIcon,
+  SignOutIcon,
+  PipeIcon,
+  DatabaseIcon,
+  BroadcastIcon,
+} from '@phosphor-icons/react'
 import { useMemo } from 'react'
 import { Link, useLocation } from 'wouter'
 
@@ -37,6 +44,7 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
       },
       { title: 'Projects', url: '/projects', icon: KanbanIcon },
       { title: 'Conduit demo', url: '/conduit', icon: PipeIcon },
+      { title: 'Shared service demo', url: '/shared-service', icon: BroadcastIcon },
       { title: 'Kysely demo', url: '/kysely', icon: DatabaseIcon },
     ],
     [],

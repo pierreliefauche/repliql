@@ -22,6 +22,7 @@
     "@repliql/reactive-kysely": "workspace:*",
     "@repliql/repliql": "workspace:*",
     "@repliql/shared-exchange": "workspace:*",
+    "@repliql/shared-service": "workspace:*",
     "@repliql/utils": "workspace:*",
     "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
     "@tailwindcss/vite": "^4.2.1",

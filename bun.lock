@@ -92,6 +92,17 @@
         "wonka": ">=6.0.0",
       },
     },
+    "packages/shared-service": {
+      "name": "@repliql/shared-service",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repliql/utils": "workspace:*",
+      },
+      "devDependencies": {
+        "comlink": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/utils": {
       "name": "@repliql/utils",
       "version": "0.0.1",
@@ -119,6 +130,7 @@
         "@repliql/reactive-kysely": "workspace:*",
         "@repliql/repliql": "workspace:*",
         "@repliql/shared-exchange": "workspace:*",
+        "@repliql/shared-service": "workspace:*",
         "@repliql/utils": "workspace:*",
         "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
         "@tailwindcss/vite": "^4.2.1",
@@ -547,6 +559,8 @@
     "@repliql/repliql": ["@repliql/repliql@workspace:packages/repliql"],
 
     "@repliql/shared-exchange": ["@repliql/shared-exchange@workspace:packages/shared-exchange"],
+
+    "@repliql/shared-service": ["@repliql/shared-service@workspace:packages/shared-service"],
 
     "@repliql/utils": ["@repliql/utils@workspace:packages/utils"],
 
