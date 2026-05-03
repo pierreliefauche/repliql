@@ -1,6 +1,10 @@
-import { heartbeat as navigatorHeartbeat } from '@repliql/utils'
+import {
+  heartbeat as navigatorHeartbeat,
+  type OperationHandle,
+  getOperationHandle,
+} from '@repliql/utils'
 import type { Client, Exchange, ExchangeIO, Operation, OperationResult } from '@urql/core'
-import { makeSubject, pipe, subscribe } from 'wonka'
+import { makeSubject, pipe, publish, subscribe, tap } from 'wonka'
 
 import { getHeartbeatId } from './getHeartbeatId'
 import type { Heartbeat, SerializedOperation, SerializedResult, SpokeCallbacks } from './types'
@@ -14,8 +18,8 @@ export interface SharedServiceConfig {
 interface SpokeState {
   id: string
   callbacks: SpokeCallbacks
-  /** Operation keys currently active from this spoke. */
-  ops: Set<number>
+  /** Operation handles currently active from this spoke. */
+  ops: Set<OperationHandle>
 }
 
 export class SharedService {
@@ -25,22 +29,22 @@ export class SharedService {
   exchange: Exchange
 
   private readonly spokes: Map<string, SpokeState>
-  /** Maps operation key → set of spoke IDs subscribed to it. */
-  private readonly operationSubscribers: Map<number, Set<string>>
-  /** Maps operation key → the spoke ID currently handling the forward for it. */
-  private readonly forwardingSpokes: Map<number, string>
-  /** Maps operation key → the spoke ID that triggered the full teardown (last unsubscriber). */
-  private readonly teardownTriggeredBy: Map<number, string>
-  /** Operation keys whose ops are currently live in the exchange pipeline. */
-  private readonly activeOperationKeys: Set<number>
+  /** Maps operation handle → set of spoke IDs subscribed to it. */
+  private readonly operationSubscribers: Map<OperationHandle, Set<string>>
+  /** Maps operation handle → the spoke ID currently handling the forward for it. */
+  private readonly forwardingSpokes: Map<OperationHandle, string>
+  /** Maps operation handle → the spoke ID that triggered the full teardown (last unsubscriber). */
+  private readonly teardownTriggeredBy: Map<OperationHandle, string>
+  /** Operation handles whose ops are currently live in the exchange pipeline. */
+  private readonly activeOperationHandles: Set<OperationHandle>
   /**
-   * Maps operation key → push function that injects a spoke's forward response back into
+   * Maps operation handle → push function that injects a spoke's forward response back into
    * the hub's forward result stream. Populated in _createForward when onForward fires;
    * consumed by resolveForwarded.
    */
-  private readonly pendingForwards: Map<number, (r: SerializedResult) => void>
-  /** Stores the deserialized Operation per key for teardown creation. */
-  private readonly operationsByKey: Map<number, Operation>
+  private readonly pendingForwards: Map<OperationHandle, (r: SerializedResult) => void>
+  /** Stores the deserialized Operation per handle for teardown creation. */
+  private readonly operationsByHandle: Map<OperationHandle, Operation>
   private readonly operationSubject: ReturnType<typeof makeSubject<Operation>>
   private readonly fakeClient: Client
 
@@ -60,12 +64,16 @@ export class SharedService {
     this.operationSubscribers = new Map()
     this.forwardingSpokes = new Map()
     this.teardownTriggeredBy = new Map()
-    this.activeOperationKeys = new Set()
+    this.activeOperationHandles = new Set()
     this.pendingForwards = new Map()
-    this.operationsByKey = new Map()
+    this.operationsByHandle = new Map()
     this.operationSubject = makeSubject<Operation>()
     this.fakeClient = this._makeFakeClient()
     this._initExchange()
+  }
+
+  private getFallbackSpoke(): SpokeState | undefined {
+    return this.spokes.values().next().value
   }
 
   /** Register a new spoke connection. Called by the spoke via Comlink. */
@@ -82,8 +90,8 @@ export class SharedService {
   disconnect(spokeId: string): void {
     const spoke = this.spokes.get(spokeId)
     if (!spoke) return
-    for (const key of [...spoke.ops]) {
-      this.teardownOperation(spokeId, key)
+    for (const handle of [...spoke.ops]) {
+      this.teardownOperation(spokeId, handle)
     }
     this.spokes.delete(spokeId)
   }
@@ -96,23 +104,24 @@ export class SharedService {
    */
   executeOperation(spokeId: string, serialized: SerializedOperation): void {
     const op = deserializeOp(serialized)
+    const handle = getOperationHandle(op)
 
-    if (!this.operationsByKey.has(op.key)) {
-      this.operationsByKey.set(op.key, op)
+    if (!this.operationsByHandle.has(handle)) {
+      this.operationsByHandle.set(handle, op)
     }
 
-    let subscribers = this.operationSubscribers.get(op.key)
+    let subscribers = this.operationSubscribers.get(handle)
     if (!subscribers) {
       subscribers = new Set()
-      this.operationSubscribers.set(op.key, subscribers)
+      this.operationSubscribers.set(handle, subscribers)
     }
     subscribers.add(spokeId)
-    this.spokes.get(spokeId)?.ops.add(op.key)
+    this.spokes.get(spokeId)?.ops.add(handle)
 
     // Rule #4: only deduplicate subscriptions. Queries and mutations always execute.
     // A new spoke joining an active subscription receives future results via _broadcastResult.
-    if (op.kind !== 'subscription' || !this.activeOperationKeys.has(op.key)) {
-      this.activeOperationKeys.add(op.key)
+    if (op.kind !== 'subscription' || !this.activeOperationHandles.has(handle)) {
+      this.activeOperationHandles.add(handle)
       this.operationSubject.next(op)
     }
   }
@@ -126,21 +135,16 @@ export class SharedService {
    * For subscriptions: if the spoke being torn down was handling the forward and other
    * spokes are still subscribed, the subscription is handed off to another spoke.
    */
-  teardownOperation(spokeId: string, key: number): void {
-    const subscribers = this.operationSubscribers.get(key)
+  teardownOperation(spokeId: string, handle: OperationHandle): void {
+    const subscribers = this.operationSubscribers.get(handle)
     subscribers?.delete(spokeId)
-    this.spokes.get(spokeId)?.ops.delete(key)
+    this.spokes.get(spokeId)?.ops.delete(handle)
 
-    const op = this.operationsByKey.get(key)
-    const forwardingSpokeId = this.forwardingSpokes.get(key)
+    const op = this.operationsByHandle.get(handle)
+    const forwardingSpokeId = this.forwardingSpokes.get(handle)
 
     // If the forwarding spoke is leaving but others remain, hand off the subscription
-    if (
-      spokeId === forwardingSpokeId &&
-      subscribers &&
-      subscribers.size > 0 &&
-      op?.kind === 'subscription'
-    ) {
+    if (spokeId === forwardingSpokeId && subscribers?.size && op?.kind === 'subscription') {
       // Tell the old spoke to teardown its forward subscription
       const oldSpoke = this.spokes.get(spokeId)
       if (oldSpoke) {
@@ -148,23 +152,23 @@ export class SharedService {
       }
 
       // Hand off to a new spoke
-      const newSpokeId = this._getOwnerSpoke(key)
+      const newSpokeId = this._getOwnerSpoke(handle)
       const newSpoke = newSpokeId && this.spokes.get(newSpokeId)
-      if (newSpoke && newSpokeId) {
-        this.forwardingSpokes.set(key, newSpokeId)
+      if (newSpoke) {
+        this.forwardingSpokes.set(handle, newSpoke.id)
         void newSpoke.callbacks.onForward(serializeOp(op))
       }
       return
     }
 
-    if (!subscribers || subscribers.size === 0) {
-      this.operationsByKey.delete(key)
-      this.operationSubscribers.delete(key)
-      this.activeOperationKeys.delete(key)
-      this.pendingForwards.delete(key)
-      this.forwardingSpokes.delete(key)
+    if (!subscribers?.size) {
+      this.operationsByHandle.delete(handle)
+      this.operationSubscribers.delete(handle)
+      this.activeOperationHandles.delete(handle)
+      this.pendingForwards.delete(handle)
+      this.forwardingSpokes.delete(handle)
       // Track that this spoke triggered the full teardown
-      this.teardownTriggeredBy.set(key, spokeId)
+      this.teardownTriggeredBy.set(handle, spokeId)
 
       if (op) {
         this.operationSubject.next({ ...op, kind: 'teardown' })
@@ -177,23 +181,25 @@ export class SharedService {
    * operation the hub forwarded via onForward. Injects the result into the hub's
    * forward stream so the wrapped exchange (e.g. cacheExchange) can process it.
    */
-  resolveForwarded(_spokeId: string, key: number, result: SerializedResult): void {
-    this.pendingForwards.get(key)?.(result)
+  resolveForwarded(_spokeId: string, handle: OperationHandle, result: SerializedResult): void {
+    this.pendingForwards.get(handle)?.(result)
   }
 
   private _makeFakeClient(): Client {
-    const service = this
+    // When the wrapped exchange calls reexecuteOperation (e.g. cacheExchange invalidating
+    // a cached key), delegate back to the origin spoke's URQL client so the spoke's full
+    // exchange chain handles the re-fetch — not the hub in isolation.
+    const reexecuteOperation: Client['reexecuteOperation'] = op => {
+      const ownerId = this._getOwnerSpoke(getOperationHandle(op))
+      const spoke = (ownerId && this.spokes.get(ownerId)) || this.getFallbackSpoke()
+
+      if (spoke) {
+        void spoke.callbacks.onReexecute(serializeOp(op))
+      }
+    }
+
     return {
-      // When the wrapped exchange calls reexecuteOperation (e.g. cacheExchange invalidating
-      // a cached key), delegate back to the origin spoke's URQL client so the spoke's full
-      // exchange chain handles the re-fetch — not the hub in isolation.
-      reexecuteOperation(op: Operation): void {
-        const ownerId = service._getOwnerSpoke(op.key)
-        const spoke = service.spokes.get(ownerId ?? '')
-        if (spoke) {
-          void spoke.callbacks.onReexecute(serializeOp(op))
-        }
-      },
+      reexecuteOperation,
     } as unknown as Client
   }
 
@@ -225,39 +231,42 @@ export class SharedService {
     return ops$ => {
       pipe(
         ops$,
-        subscribe(op => {
+        tap(op => {
+          const handle = getOperationHandle(op)
+
           if (op.kind === 'teardown') {
             // Forward to the spoke that triggered the full teardown (still alive since it just called teardownOperation)
-            const triggeringSpoke = this.teardownTriggeredBy.get(op.key)
+            const triggeringSpoke = this.teardownTriggeredBy.get(handle)
             const spoke = this.spokes.get(triggeringSpoke ?? '')
             if (spoke) void spoke.callbacks.onForward(serializeOp(op))
-            this.forwardingSpokes.delete(op.key)
-            this.teardownTriggeredBy.delete(op.key)
-            this.pendingForwards.delete(op.key)
+            this.forwardingSpokes.delete(handle)
+            this.teardownTriggeredBy.delete(handle)
+            this.pendingForwards.delete(handle)
             return
           }
 
-          const ownerId = this._getOwnerSpoke(op.key)
-          const spoke = ownerId && this.spokes.get(ownerId)
+          const ownerId = this._getOwnerSpoke(handle)
+          const spoke = (ownerId && this.spokes.get(ownerId)) || this.getFallbackSpoke()
 
-          if (!spoke || !ownerId) return
+          if (!spoke) return
 
           // Track who is handling this forward (for subscription handoff)
-          this.forwardingSpokes.set(op.key, ownerId)
-          this.pendingForwards.set(op.key, serialized => {
-            const storedOp = this.operationsByKey.get(op.key) ?? op
-            pushResult(deserializeResult(serialized, storedOp))
+          this.forwardingSpokes.set(handle, spoke.id)
+          this.pendingForwards.set(handle, serialized => {
+            pushResult(deserializeResult(serialized, op))
           })
           void spoke.callbacks.onForward(serializeOp(op))
         }),
+        publish,
       )
+
       return resultSrc
     }
   }
 
   /** Returns the ID of the first spoke subscribed to the given key (rule #3: origin priority). */
-  private _getOwnerSpoke(key: number): string | undefined {
-    for (const id of this.operationSubscribers.get(key) ?? []) {
+  private _getOwnerSpoke(handle: OperationHandle): string | undefined {
+    for (const id of this.operationSubscribers.get(handle) ?? []) {
       return id
     }
     return undefined
@@ -265,7 +274,7 @@ export class SharedService {
 
   private _broadcastResult(result: OperationResult): void {
     const serialized = serializeResult(result)
-    const subscribers = this.operationSubscribers.get(result.operation.key)
+    const subscribers = this.operationSubscribers.get(getOperationHandle(result.operation))
     if (!subscribers) return
 
     // Subscriptions and queries/mutations are broadcast to all current subscribers.

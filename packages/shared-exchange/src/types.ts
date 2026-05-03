@@ -1,3 +1,4 @@
+import { OperationHandle } from '@repliql/utils'
 import type { Operation, OperationContext, OperationResult } from '@urql/core'
 
 type NoFunction<T> = T extends Function ? undefined : T
@@ -17,6 +18,7 @@ export interface SerializedError {
 }
 
 export type SerializedResult = Omit<OperationResult, 'error' | 'operation'> & {
+  handle: OperationHandle
   key: Operation['key']
   error?: SerializedError
 }

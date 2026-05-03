@@ -1,3 +1,4 @@
+import { getOperationHandle } from '@repliql/utils'
 import type { Operation, OperationResult } from '@urql/core'
 import { CombinedError } from '@urql/core'
 
@@ -36,12 +37,17 @@ export function serializeOp(op: Operation): SerializedOperation {
 export function deserializeOp(serialized: SerializedOperation, originalOp?: Operation): Operation {
   return {
     ...serialized,
-    context: { ...originalOp?.context, ...serialized.context },
+    context: {
+      ...originalOp?.context,
+      ...serialized.context,
+      fetchOptions: originalOp?.context?.fetchOptions || serialized.context.fetchOptions,
+    },
   } as unknown as Operation
 }
 
 export function serializeResult(result: OperationResult): SerializedResult {
   return {
+    handle: getOperationHandle(result.operation),
     key: result.operation.key,
     data: result.data,
     error: result.error
