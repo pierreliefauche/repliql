@@ -34,8 +34,6 @@ import {
   OperationResult,
   makeResult,
   makeErrorResult,
-  getOperationName,
-  stringifyDocument,
 } from '@urql/core'
 import DataLoader from 'dataloader'
 import {
@@ -54,6 +52,7 @@ import {
 
 import { Database } from './database'
 import { type DatabaseSchema } from './database/schema'
+import { MutationsProcessor } from './MutationsProcessor'
 import { persistOperationResult } from './persistOperationResult'
 
 type BaseResolverContext = {
@@ -88,7 +87,13 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
   return ({ forward, ...input }) => {
     return _operations$ => {
       const db = new Database({ kysely })
-      void db.migrate()
+
+      const mutationsProcessor = new MutationsProcessor({
+        db,
+        client: input.client,
+      })
+
+      void db.migrate().then(() => mutationsProcessor.start())
 
       const liveQueryOperations = makeOperationsRegistry<{
         operation: Operation
@@ -275,16 +280,7 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
       const compiledByOperationKey = new Map<number, CompiledOperation>()
 
       async function executeOperation(operation: Operation) {
-        const mutation =
-          operation.kind === 'mutation'
-            ? await db.insertMutation({
-                id: operation.context.operationId,
-                name: getOperationName(operation.query) || null,
-                query: stringifyDocument(operation.query),
-                params: operation.variables || {},
-                status: 'pending',
-              })
-            : undefined
+        const mutation = await mutationsProcessor.initMutation(operation)
 
         const queryById = new DataLoader<string, { id: string; data: unknown } | undefined>(
           async queryIds => {
@@ -332,6 +328,8 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
         }
 
         const patchEntity: MutationResolverContext['patchEntity'] = async entity => {
+          operation.context.optimistic = true
+
           const entities = await db.patchEntities({
             mutationId: mutation!.id,
             byOperationKey: operation.key,
@@ -438,7 +436,7 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
         })
 
         if (operation.kind === 'mutation') {
-          // Something to do?
+          mutationsProcessor.runCycle()
         } else {
           if (!errors?.length) {
             watchOperation(operation, visits)
@@ -526,22 +524,25 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
               return result.operation
             }),
           ),
-          // Forward teardowns and operations that should be fetched whatever the cache result
+          // Forward operations that should be fetched whatever the cache result.
+          // Mutations are processor-only; pass through any unknown kinds.
           pipe(
             operations$,
             filter(
               op =>
-                op.kind !== 'query' ||
-                op.context.requestPolicy === 'cache-and-network' ||
-                op.context.requestPolicy === 'network-only',
+                (op.kind !== 'mutation' && op.kind !== 'query') ||
+                (op.kind === 'query' &&
+                  (op.context.requestPolicy === 'cache-and-network' ||
+                    op.context.requestPolicy === 'network-only')) ||
+                (op.kind === 'mutation' && op.context.requestPolicy === 'network-only'),
             ),
           ),
         ]),
         map(mapTypeNames),
         forward,
         tap(async result => {
-          if (!result.error) {
-            await lockAndFlushStaleOperations(async () => {
+          await lockAndFlushStaleOperations(async () => {
+            if (!result.error) {
               persistOperationResult({ db })(result)
 
               if (
@@ -556,8 +557,10 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
                   console.error('Failed to re-execute operation after fetch', error),
                 )
               }
-            })
-          }
+            }
+
+            mutationsProcessor.onMutationResult(result)
+          })
         }),
         filter(r => !r.error),
       )

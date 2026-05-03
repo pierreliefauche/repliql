@@ -38,6 +38,7 @@
     "test:watch": "bun test ./src/**/*.test.ts ./src/*.test.ts --watch"
   },
   "dependencies": {
+    "@0no-co/graphql.web": "catalog:",
     "@repliql/reactive-kysely": "workspace:*",
     "@repliql/utils": "workspace:*",
     "@urql/core": "catalog:",

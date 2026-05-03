@@ -65,6 +65,7 @@
       "name": "@repliql/repliql",
       "version": "0.0.1",
       "dependencies": {
+        "@0no-co/graphql.web": "catalog:",
         "@repliql/reactive-kysely": "workspace:*",
         "@repliql/utils": "workspace:*",
         "@urql/core": "catalog:",

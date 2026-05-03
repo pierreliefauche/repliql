@@ -58,11 +58,6 @@ export function persistOperationResult({ db }: PersistOperationResultConfig) {
           data,
         })),
       })
-    } else if (operationResult.operation.kind === 'mutation') {
-      await db.resolveMutation({
-        mutationId: operationResult.operation.context.operationId,
-        status: 'applied',
-      })
     }
   }
 }

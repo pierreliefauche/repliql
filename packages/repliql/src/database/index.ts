@@ -1,7 +1,7 @@
 import type { ReactiveKysely } from '@repliql/reactive-kysely'
 import { toJsonbPreserveNulls } from '@repliql/reactive-kysely'
 import { Entity, EntityRef, getEntityRef, isPrimitive, Primitive } from '@repliql/utils'
-import { type MigrationResultSet, Migrator, sql } from 'kysely'
+import { type MigrationResultSet, Migrator, Selectable, sql } from 'kysely'
 
 import {
   ACTIVE_MUTATION_STATUSES,
@@ -13,6 +13,8 @@ import {
 type DatabaseConfig<DB extends DatabaseSchema = DatabaseSchema> = {
   kysely: ReactiveKysely<DB>
 }
+
+export type Mutation = Selectable<DatabaseSchema['mutations']>
 
 export class Database<DB extends DatabaseSchema = DatabaseSchema> {
   private kysely: ReactiveKysely<DB>
@@ -290,7 +292,46 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
     })
   }
 
+  public async claimNextPendingMutation() {
+    return this.client
+      .updateTable('mutations')
+      .set('status', 'inflight')
+      .set('$updatedAt', new Date().toISOString())
+      .where('id', '=', eb =>
+        eb
+          .selectFrom('mutations')
+          .select('id')
+          .where('status', '=', 'pending')
+          .orderBy('$createdAt', 'asc')
+          .limit(1),
+      )
+      .returningAll()
+      .executeTakeFirst()
+  }
+
+  public async requeueInflightMutations() {
+    console.log(']]]]]]]]]]]]]]]]]]]] REQUEUE all')
+    await this.client
+      .updateTable('mutations')
+      .set('status', 'pending')
+      .set('$updatedAt', new Date().toISOString())
+      .where('status', '=', 'inflight')
+      .execute()
+  }
+
+  public async requeueInflightMutation(mutationId: string) {
+    console.log(']]]]]]]]]]]]]]]]]]]] REQUEUE', mutationId)
+    await this.client
+      .updateTable('mutations')
+      .set('status', 'pending')
+      .set('$updatedAt', new Date().toISOString())
+      .where('status', '=', 'inflight')
+      .where('id', '=', mutationId)
+      .execute()
+  }
+
   async resolveMutation(args: { mutationId: string; status: ResolvedMutationStatus }) {
+    console.log(']]]]]]]]]]]]]]]]]]]] RESOLVE DB', args)
     const { mutationId, status } = args
 
     const [mutation] = await Promise.all([
