@@ -11,7 +11,16 @@
   "arrowParens": "avoid", // Only add parentheses to arrow functions when necessary
   "bracketSpacing": true, // Add spaces inside { } in object literals
   "singleAttributePerLine": false, // Allow multiple JSX attributes on one line
-  "ignorePatterns": ["node_modules", "dist", ".git", ".env*", "*.min.js", "*.min.css", "coverage"],
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    ".git",
+    ".env*",
+    "*.min.js",
+    "*.min.css",
+    "coverage",
+    ".agents/",
+  ],
   "experimentalSortPackageJson": {
     "sortScripts": true,
   },

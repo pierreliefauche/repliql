@@ -16,10 +16,8 @@
     }
   },
   "scripts": {
-    "build": "bun run build:esm && bun run build:cjs",
-    "build:cjs": "bun build ./src/index.ts --outfile ./dist/index.cjs --format cjs --minify --packages=external",
-    "build:esm": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "fmt": "oxfmt --write src",
     "lint": "oxlint src",
     "test": "bun test ./src/**/*.test.ts ./src/*.test.ts",
@@ -29,10 +27,10 @@
     "@0no-co/graphql.web": "catalog:",
     "@solana/fast-stable-stringify": "^6.8.0",
     "@urql/core": "catalog:",
-    "strict-event-emitter": "^0.5.1"
+    "strict-event-emitter": "^0.5.1",
+    "wonka": "catalog:"
   },
   "devDependencies": {
-    "graphql": "catalog:",
-    "wonka": "catalog:"
+    "graphql": "catalog:"
   }
 }

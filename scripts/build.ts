@@ -12,7 +12,6 @@ import { $ } from 'bun'
 
 const ROOT = import.meta.dir.replace('/scripts', '')
 const PACKAGES_DIR = path.join(ROOT, 'packages')
-const PLAYGROUNDS_DIR = path.join(ROOT, 'playgrounds')
 
 interface BuildResult {
   name: string
@@ -158,46 +157,6 @@ async function buildPackage(packageName: string): Promise<BuildResult> {
 }
 
 /**
- * Build playground web app
- */
-async function buildPlayground(name: string): Promise<BuildResult> {
-  const playgroundPath = path.join(PLAYGROUNDS_DIR, name)
-
-  if (!fs.existsSync(playgroundPath)) {
-    return {
-      name: `playground/${name}`,
-      success: false,
-      error: 'Playground not found',
-    }
-  }
-
-  try {
-    const startTime = Date.now()
-    log(`Building playground/${name}...`)
-
-    await $`cd ${playgroundPath} && bun run build`
-
-    const duration = Date.now() - startTime
-    log(`Built playground/${name} in ${duration}ms`, 'success')
-
-    return {
-      name: `playground/${name}`,
-      success: true,
-      duration,
-    }
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error)
-    log(`Failed to build playground/${name}: ${errorMsg}`, 'error')
-
-    return {
-      name: `playground/${name}`,
-      success: false,
-      error: errorMsg,
-    }
-  }
-}
-
-/**
  * Main build orchestration
  */
 async function main() {
@@ -224,19 +183,6 @@ async function main() {
     if (!result.success) {
       log(`Stopping build due to failure in ${pkg}`, 'error')
       break
-    }
-  }
-
-  // Build playgrounds (only if all packages succeeded)
-  const allPackagesSucceeded = results.every(r => r.success)
-  if (allPackagesSucceeded && fs.existsSync(PLAYGROUNDS_DIR)) {
-    const playgrounds = fs
-      .readdirSync(PLAYGROUNDS_DIR)
-      .filter(name => fs.statSync(path.join(PLAYGROUNDS_DIR, name)).isDirectory())
-
-    for (const playground of playgrounds) {
-      const result = await buildPlayground(playground)
-      results.push(result)
     }
   }
 

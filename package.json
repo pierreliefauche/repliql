@@ -11,7 +11,6 @@
   "type": "module",
   "scripts": {
     "build": "bun ./scripts/build.ts",
-    "build:packages": "bun run --filter='./packages/*' build",
     "dev": "NODE_ENV=development bun run --filter @repliql/playground-linear dev",
     "fmt": "oxfmt --write .",
     "fmt:check": "oxfmt --check .",
@@ -26,6 +25,7 @@
     "lint-staged": "^15.0.0",
     "oxfmt": "latest",
     "oxlint": "latest",
+    "tsdown": "^0.21.10",
     "typescript": "catalog:"
   },
   "husky": {
