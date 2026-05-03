@@ -10,7 +10,7 @@ export { EventEmitter } from './EventEmitter'
 export { heartbeat } from './heartbeat'
 export type { Heartbeat } from './heartbeat'
 export { makeLogger } from './logger'
-export type { LoggerConfig, LogLevel } from './logger'
+export type { LoggerConfig, LogLevel, Logger } from './logger'
 
 // GraphQL
 

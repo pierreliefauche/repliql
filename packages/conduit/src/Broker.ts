@@ -1,4 +1,4 @@
-import { heartbeat } from '@repliql/utils'
+import { heartbeat, Logger } from '@repliql/utils'
 import { wrap, type Remote } from 'comlink'
 
 import { ConduitEventEmitter } from './events'
@@ -13,6 +13,11 @@ interface TabEntry<T> {
 
 type Dispatch<T> = (leaderId: string, remote: Remote<T>) => void
 
+type BrokerConfig = {
+  events: ConduitEventEmitter
+  logger: Logger
+}
+
 /**
  * Broker living inside the shared worker. It holds a Comlink remote for every
  * registered tab's dedicated worker, elects one tab as leader, and re-elects
@@ -23,14 +28,16 @@ type Dispatch<T> = (leaderId: string, remote: Remote<T>) => void
  * when the leader dies mid-call. The next leader is the *youngest* tab.
  */
 export class Broker<T> {
+  protected log: Logger
   private readonly tabs = new Map<string, TabEntry<T>>()
   private currentLeaderId: string | null = null
   private readonly pendingDispatches: Dispatch<T>[] = []
   private readonly inflightByLeader = new Map<string, Set<() => void>>()
   public readonly events: ConduitEventEmitter
 
-  constructor(events: ConduitEventEmitter) {
+  constructor({ events, logger }: BrokerConfig) {
     this.events = events
+    this.log = logger
   }
 
   /**
@@ -54,12 +61,15 @@ export class Broker<T> {
 
   private _register(tabId: string, remote: Remote<T>, port: MessagePort | null): void {
     if (this.tabs.has(tabId)) {
+      this.log.warn('Tab is already registered with broker', { tabId })
       return
     }
 
+    this.log.debug('Registering tab with broker', { tabId })
     this.tabs.set(tabId, { remote, port, registeredAt: Date.now() })
 
     heartbeat.onStop(getHeartbeatId(tabId), () => {
+      this.log.debug('Tab heartbeat stopped', { tabId })
       this._removeTab(tabId)
     })
 
@@ -73,6 +83,7 @@ export class Broker<T> {
    * tab as stopped. Triggers re-election if the unregistered tab was leader.
    */
   public unregisterTab(tabId: string): void {
+    this.log.debug('Unregistering tab from broker', { tabId })
     this._removeTab(tabId)
   }
 
@@ -142,6 +153,8 @@ export class Broker<T> {
   }
 
   private _removeTab(tabId: string): void {
+    this.log.debug('Removing tab from broker', { tabId })
+
     const entry = this.tabs.get(tabId)
     const inflight = this.inflightByLeader.get(tabId)
 
@@ -149,10 +162,12 @@ export class Broker<T> {
     this.inflightByLeader.delete(tabId)
 
     if (entry?.port) {
+      this.log.debug('Closing tab port', { tabId })
       try {
         entry.port.close()
-      } catch {
+      } catch (error) {
         // ignore — port may already be closed
+        this.log.warn('Failed to close tab port', { tabId, error })
       }
     }
 
@@ -163,6 +178,8 @@ export class Broker<T> {
     }
 
     if (this.currentLeaderId === tabId) {
+      this.log.debug('Resigning leader', { tabId })
+
       const oldLeaderId = tabId
       this.currentLeaderId = null
 
@@ -178,8 +195,11 @@ export class Broker<T> {
   private _promote(tabId: string): void {
     const entry = this.tabs.get(tabId)
     if (!entry) {
+      this.log.error('Tab not found to promote to leader', { tabId })
       return
     }
+
+    this.log.debug('Promoting leader', { tabId })
 
     this.currentLeaderId = tabId
 
@@ -188,6 +208,7 @@ export class Broker<T> {
     this.events.emit('leaderElected', { leaderId: tabId, port: entry.port })
 
     if (this.pendingDispatches.length > 0) {
+      this.log.debug('Dispatching pending calls', { count: this.pendingDispatches.length })
       const pending = this.pendingDispatches.splice(0)
       for (const dispatch of pending) {
         dispatch(tabId, entry.remote)

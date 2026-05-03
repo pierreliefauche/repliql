@@ -5,6 +5,10 @@ import { expose } from 'comlink'
 import { OfficialWasmDialect, type OfficialWasmDB } from 'kysely-wasm'
 
 conduit({
+  logger: {
+    level: 'error',
+    ...console,
+  },
   onElectedLeader: async port => {
     const createDbPromise = Promise.resolve().then(async () => {
       const sqlite3 = await sqlite3InitModule()

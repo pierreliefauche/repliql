@@ -13,13 +13,13 @@ export type LoggerConfig = {
   [L in LogLevel]?: (prefix: string, message: string, ...args: unknown[]) => void
 }
 
-type Logger = {
+export type Logger = {
   [L in LogLevel]: (message: string, ...args: unknown[]) => void
 }
 
 export function makeLogger(config: LoggerConfig & { prefix: string }): Logger {
   const { level, prefix, ...loggingFn } = config
-  const getLevel = typeof level === 'function' ? level : () => level || 'debug'
+  const getLevel = typeof level === 'function' ? level : () => level || 'info'
 
   return {
     debug(message, ...args) {

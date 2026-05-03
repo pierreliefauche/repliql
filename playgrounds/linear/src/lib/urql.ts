@@ -16,6 +16,10 @@ const { sharedWorker } = conduit({
       type: 'module',
       name: 'linear-repliql',
     }),
+  logger: {
+    level: 'error',
+    ...console,
+  },
 })
 
 const sharedService = proxySharedService({ endpoint: sharedWorker.port })

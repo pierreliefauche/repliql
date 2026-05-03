@@ -1,13 +1,14 @@
-import { heartbeat, randomId } from '@repliql/utils'
+import { heartbeat, LoggerConfig, makeLogger, randomId } from '@repliql/utils'
 
 import { getHeartbeatId } from './getHeartbeatId'
 import { CONDUIT_DEDICATED_PORT, CONDUIT_REGISTER_TAB, CONDUIT_UNREGISTER_TAB } from './protocol'
 
-export interface CreateConduitConfig {
+export interface CreateTabConduitConfig {
   /** Factory for this tab's dedicated worker. */
   loadWorker: () => Worker
   /** Factory for the shared worker. The returned `SharedWorker` is also exposed on the handle. */
   loadSharedWorker: () => SharedWorker
+  logger?: LoggerConfig
 }
 
 export interface ConduitHandle {
@@ -40,18 +41,25 @@ export interface ConduitHandle {
  * The tab itself doesn't decide whether it's leader — the shared worker's
  * broker does, picking the oldest registered tab and re-electing on death.
  */
-export function conduit(config: CreateConduitConfig): ConduitHandle {
-  const { loadSharedWorker, loadWorker } = config
+export function conduit(config: CreateTabConduitConfig): ConduitHandle {
+  const { loadSharedWorker, loadWorker, logger: loggerConfig } = config
 
+  const log = makeLogger({ ...loggerConfig, prefix: `[Conduit] [tab]` })
+  const tabId = randomId()
+
+  log.debug('Starting Conduit', { tabId })
+
+  log.debug('Loading workers')
   const sharedWorker = loadSharedWorker()
   const dedicatedWorker = loadWorker()
 
-  const tabId = randomId()
-
   const registerPromise = (async () => {
+    log.debug('Starting heartbeat')
     await heartbeat.start(getHeartbeatId(tabId))
+
     sharedWorker.port.start()
 
+    log.debug('Creating channel and handing off ports to workers')
     const channel = new MessageChannel()
     dedicatedWorker.postMessage({ __conduit: CONDUIT_DEDICATED_PORT, port: channel.port1 }, [
       channel.port1,
@@ -62,6 +70,7 @@ export function conduit(config: CreateConduitConfig): ConduitHandle {
   })()
 
   const cleanup = () => {
+    log.debug('Cleaning up')
     sharedWorker.port.postMessage({ __conduit: CONDUIT_UNREGISTER_TAB, tabId })
   }
 
@@ -75,6 +84,8 @@ export function conduit(config: CreateConduitConfig): ConduitHandle {
     sharedWorker,
 
     async dispose() {
+      log.debug('Disposing')
+
       try {
         await registerPromise
       } catch {

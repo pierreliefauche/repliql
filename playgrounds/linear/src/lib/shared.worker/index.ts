@@ -12,7 +12,12 @@ import { SqliteAdapter, SqliteIntrospector, SqliteQueryCompiler } from 'kysely'
 
 import { resolvers } from './resolvers'
 
-const { wrapDedicatedWorker, onConnectTab, events } = conduit()
+const { wrapDedicatedWorker, onConnectTab, events } = conduit({
+  logger: {
+    level: 'error',
+    ...console,
+  },
+})
 
 const remoteBridge = wrapDedicatedWorker<DriverBridgeRemote>()
 const createCallbackFunction = replayCreateCallbackFunction({ events })

@@ -1,3 +1,4 @@
+import { LoggerConfig, makeLogger } from '@repliql/utils'
 import type { Remote } from 'comlink'
 
 import { Broker } from './Broker'
@@ -5,6 +6,10 @@ import { ConduitEventEmitter } from './events'
 import { isRegisterTabMessage, isUnregisterTabMessage } from './protocol'
 
 type OnConnectTabCallback = (port: MessagePort) => void
+
+interface CreateSharedConduitConfig {
+  logger?: LoggerConfig
+}
 
 /**
  * Boots the conduit on the shared worker side. Must be called once at
@@ -22,24 +27,33 @@ type OnConnectTabCallback = (port: MessagePort) => void
  * - `onConnectTab(cb)` — register a callback fired with each tab's port, e.g.
  *   to `Comlink.expose` a service to that tab.
  */
-export function conduit() {
+export function conduit(config?: CreateSharedConduitConfig) {
+  const log = makeLogger({ ...config?.logger, prefix: `[Conduit] [shared]` })
+
   const events = new ConduitEventEmitter()
-  const broker = new Broker(events)
+  const broker = new Broker({ events, logger: log })
   const connectTabCallbacks = new Set<OnConnectTabCallback>()
 
-  ;(self as unknown as SharedWorkerGlobalScope).addEventListener('connect', ({ ports }) => {
-    const port = ports[0]
+  ;(self as unknown as SharedWorkerGlobalScope).addEventListener('connect', e => {
+    log.debug('Connection event', e)
+
+    const port = e.ports[0]
     if (!port) {
+      log.warn('Connection event is missing port', e)
       return
     }
 
     port.addEventListener('message', ({ data }) => {
       if (isRegisterTabMessage(data)) {
+        log.debug('Registering tab', { tabId: data.tabId })
         broker.registerTab(data.tabId, data.port)
       } else if (isUnregisterTabMessage(data)) {
+        log.debug('Unregistering tab', { tabId: data.tabId })
         broker.unregisterTab(data.tabId)
       }
     })
+
+    log.debug('Calling onConnectTab callbacks', { count: connectTabCallbacks.size })
 
     for (const cb of connectTabCallbacks) {
       cb(port)
@@ -71,15 +85,19 @@ export function conduit() {
    * accidentally `await`ing it does not trigger a remote `then` call.
    */
   function wrapDedicatedWorker<T extends Record<string, (...a: any[]) => unknown>>(): Remote<T> {
+    log.debug('Wrapping dedicated worker')
+
     return new Proxy(Object.create(null) as Remote<T>, {
       get(_target, prop: keyof T | symbol) {
         if (typeof prop === 'symbol') {
+          log.warn('Trying to access symbol property on proxy')
           return undefined
         }
 
         // Make the proxy non-thenable so accidental `await proxy` doesn't trigger
         // a remote `then` call.
         if (prop === 'then') {
+          log.warn('Awaiting dedicated worker proxy')
           return undefined
         }
 
@@ -87,8 +105,10 @@ export function conduit() {
           (broker as Broker<T>).callOnLeader(remote => {
             const fn = remote[prop]
             if (typeof fn !== 'function') {
+              log.error('Leader property is not a function', { name: String(prop), prop: fn })
               throw new TypeError(`@repliql/conduit: leader has no method "${String(prop)}"`)
             }
+
             return fn(...args)
           })
       },
