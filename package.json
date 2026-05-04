@@ -11,15 +11,19 @@
   "type": "module",
   "scripts": {
     "build": "bun ./scripts/build.ts",
+    "changeset": "changeset",
     "dev": "NODE_ENV=development bun run --filter @repliql/playground-linear dev",
     "fmt": "oxfmt --write .",
     "fmt:check": "oxfmt --check .",
     "lint": "oxlint .",
+    "release": "bun run build && bun run ./scripts/release.ts",
     "test": "bun test --config=bunfig.jsonc",
     "test:watch": "bun test --config=bunfig.jsonc --watch",
-    "typecheck": "bun run --filter './packages/*' typecheck"
+    "typecheck": "bun run --filter './packages/*' typecheck",
+    "version": "changeset version"
   },
   "devDependencies": {
+    "@changesets/cli": "2.31.0",
     "@types/bun": "latest",
     "bun-types": "latest",
     "husky": "^9.0.0",

@@ -37,6 +37,10 @@ Typical applications:
 - Mail
 - Project management
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the changeset workflow and release process.
+
 ## Milestones
 
 #### 🤞 0.1.0 Hub & spoke exchange
