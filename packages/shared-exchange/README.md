@@ -1,233 +1,126 @@
-# Shared Exchange
+# @repliql/shared-exchange
 
-> Share a single [URQL](https://urql.dev) exchange between multiple tabs/processes.
+> Share a single [URQL](https://urql.dev) exchange between multiple tabs or processes.
 
-`@repliql/shared-exchange` enables centralized GraphQL state management across browser tabs or Electron renderer processes using a hub-and-spoke architecture. Run a single exchange in a shared worker or main process, and have multiple URQL clients access it simultaneously.
+`@repliql/shared-exchange` lets you run one URQL exchange (cache, auth, logging, normalized cache, …) inside a SharedWorker or main process and have multiple URQL clients across tabs/renderers consume it as if it were a local exchange. Operations from all spokes are deduplicated, teardowns are reference-counted, and results are routed back to the originating spoke first.
 
-## Features
-
-- **Unified Cache** – Share a single GraphQL cache across multiple tabs/processes
-- **Deduplication** – Identical subscriptions are only sent once, regardless of request count
-- **Intelligent Teardown** – Operations are only cleaned up when all consumers unsubscribe
-- **Priority Forwarding** – Results are returned to origin spokes first
-- **Flexible Architecture** – Works with any URQL exchange (cache, auth, logging, etc.)
-- **Cross-Platform** – Browser (SharedWorker) and Electron (main process) support
-- **Zero-Config** – Drop-in integration into existing URQL clients
-
-## Installation
+## Install
 
 ```bash
-npm install @repliql/shared-exchange
+npm install @repliql/shared-exchange @repliql/shared-service @urql/core comlink wonka
+# or
+bun add @repliql/shared-exchange @repliql/shared-service @urql/core comlink wonka
 ```
 
-**Peer Dependencies:**
+Peer dependencies: [`@urql/core`](https://www.npmjs.com/package/@urql/core) (≥ 5), [`comlink`](https://www.npmjs.com/package/comlink) (≥ 4), [`wonka`](https://www.npmjs.com/package/wonka) (≥ 6). Transport is built on [`@repliql/shared-service`](https://www.npmjs.com/package/@repliql/shared-service), so install it alongside.
 
-- `@urql/core` ≥ 5.0.0
-- `wonka` ≥ 6.0.0
+## Why
 
-## How It Works
+- **Unified cache** — one cache instance shared across every tab.
+- **Subscription deduplication** — N spokes asking for the same subscription create one upstream subscription.
+- **Reference-counted teardowns** — operations only tear down when every spoke has unsubscribed.
+- **Origin-first delivery** — results are forwarded to the originating spoke first.
+- **Drop-in** — works with any URQL exchange. No changes to your existing exchanges.
 
-The library uses a hub & spoke architecture powered by [Comlink](https://www.npmjs.com/package/comlink) for inter-process communication:
+## Architecture
 
-- **Hub** – Single shared worker (browser) or main process (Electron) running the exchange
-- **Spokes** – Multiple tabs or renderer processes that connect to the hub
-- **MessagePort** – Lightweight bidirectional communication channel between hub and spoke
+Hub-and-spoke over [Comlink](https://www.npmjs.com/package/comlink) message ports.
 
-## Setup
+- **Hub** — a single SharedWorker (browser) or main process (Electron). Hosts the real `Exchange` inside `SharedExchangeService`.
+- **Spokes** — each tab / renderer's URQL client. Uses `proxySharedExchange` to forward operations to the hub.
 
-### Browser Setup (SharedWorker)
+The hub can also delegate the network leg back down to a chosen spoke — useful when the hub itself can't `fetch` (e.g. behind cookie-bound auth that lives in a tab).
 
-#### 1. Create a SharedWorker file
+## Browser usage (SharedWorker)
 
-**worker.ts** – The hub process
+`SharedExchangeService` plugs into [`@repliql/shared-service`](https://www.npmjs.com/package/@repliql/shared-service)'s `SharedServicesManager`. You register it under a name (e.g. `sharedExchange`), expose the manager's `connector` over Comlink to connecting tabs, and grab a typed proxy on the tab side.
+
+### shared.worker.ts — the hub
 
 ```ts
+import { SharedExchangeService, type SharedExchange } from '@repliql/shared-exchange/shared'
+import { SharedServicesManager } from '@repliql/shared-service/shared'
 import { cacheExchange } from '@urql/exchange-graphcache'
-import { exposeSharedService, SharedService } from '@repliql/shared-exchange'
+import { expose } from 'comlink'
 
-// Create the exchange (cache, logging, auth, or any custom exchange)
-const sharedService = new SharedService({
-  exchange: cacheExchange({}),
+const sharedServices = new SharedServicesManager<{ sharedExchange: SharedExchange }>({
+  services: {
+    sharedExchange: new SharedExchangeService({
+      exchange: cacheExchange({}),
+    }),
+  },
 })
 
-// Expose to all connected tabs
-exposeSharedService(sharedService)
+self.onconnect = e => expose(sharedServices.connector, e.ports[0])
 ```
 
-#### 2. Connect from your tabs
+You can register more services on the same manager — for example a Kysely driver bridge — and they'll all share the same SharedWorker connection.
 
-**main.ts** – The spoke (your app)
-
-```ts
-import { createClient, fetchExchange } from 'urql'
-import { proxySharedExchange } from '@repliql/shared-exchange'
-
-// Connect to the shared worker
-const worker = new SharedWorker('worker.ts')
-
-// Create the proxy exchange
-const sharedCacheExchange = proxySharedExchange({
-  endpoint: worker.port,
-})
-
-// Use in your URQL client
-const urqlClient = createClient({
-  url: 'https://api.app/graphql',
-  exchanges: [sharedCacheExchange, fetchExchange],
-})
-```
-
-### Electron Setup (Main Process)
-
-#### 1. Set up the hub (main process)
-
-**main.ts**
+### main.ts — a spoke (your app)
 
 ```ts
-import { app, ipcMain } from 'electron'
-import { cacheExchange } from '@urql/exchange-graphcache'
-import { exposeSharedService, SharedService } from '@repliql/shared-exchange'
+import { proxySharedExchange, type SharedExchange } from '@repliql/shared-exchange/tab'
+import {
+  wrapSharedServices,
+  type SharedServicesConnector,
+} from '@repliql/shared-service/tab'
+import { Client, fetchExchange } from '@urql/core'
+import { wrap } from 'comlink'
 
-app.on('ready', () => {
-  const sharedService = new SharedService({
-    exchange: cacheExchange({}),
-  })
+const worker = new SharedWorker(new URL('./shared.worker.ts', import.meta.url), {
+  type: 'module',
+})
 
-  exposeSharedService(sharedService)
+const connector = wrap<SharedServicesConnector>(worker.port)
+const { sharedExchange } = wrapSharedServices<{ sharedExchange: SharedExchange }>(connector)
+
+const client = new Client({
+  url: '/graphql',
+  exchanges: [proxySharedExchange({ sharedExchange }), fetchExchange],
 })
 ```
 
-#### 2. Connect from renderer processes
+`sharedExchange` here is the `Remote<SharedExchange>` proxy resolved by `wrapSharedServices` — pass it directly to `proxySharedExchange`.
 
-**renderer.ts**
+## Electron usage (main process)
 
-```ts
-import { createClient, fetchExchange } from 'urql'
-import { proxySharedExchange } from '@repliql/shared-exchange'
-import { ipcRenderer } from 'electron'
+The hub can run in the Electron main process; renderers connect with a `MessagePort` transferred via IPC. The wiring on either side is the same as the SharedWorker case above — substitute the port acquisition for whichever IPC channel you use.
 
-const port = // receive MessagePort from main process
-const sharedCacheExchange = proxySharedExchange({ endpoint: port })
+## Hot-swappable exchange
 
-const urqlClient = createClient({
-  url: 'https://api.app/graphql',
-  exchanges: [sharedCacheExchange, fetchExchange],
-})
-```
+`SharedExchangeService#exchange` is assignable, so you can swap the wrapped exchange at runtime — for example, to reset the cache from any tab on logout. Custom methods can be exposed on a subclass and reached from spokes by adding the subclass type to the `wrapSharedServices` generic.
 
-## Rules of Shared Exchanges
+## Behavior guarantees
 
-These behaviors are automatic and enforce consistency across spokes:
+- Can be inserted anywhere in the spoke's exchange chain.
+- Teardown is broadcast only when **all** subscribed spokes have torn down.
+- Operations are forwarded to the **origin spoke first** — results return locally before being multicast.
+- Subscriptions are **deduplicated** across spokes.
+- Spokes can run identical exchanges locally for non-shared traffic; the proxy only intercepts what it needs to.
 
-- ✅ Can be added anywhere in the exchange chain
-- ✅ Keeps track of operations per spoke and only applies teardown when **all** spokes using the operation have sent teardowns
-- ✅ Operations are forwarded to their **origin spoke in priority**
-- ✅ Subscriptions are **de-duplicated** (2 spokes requesting the same subscription will not trigger 2 subscriptions down the chain)
+## API
 
-## Advanced Examples
-
-### Reset Cache Between Tabs
-
-Extend `SharedService` to expose custom methods callable from any spoke:
-
-**worker.ts**
+### `SharedExchangeService`
 
 ```ts
-import { cacheExchange } from '@urql/exchange-graphcache'
-import { exposeSharedService, SharedService } from '@repliql/shared-exchange'
-
-function initCacheExchange() {
-  return cacheExchange({})
-}
-
-// Extend to expose custom methods to spokes
-class MySharedService extends SharedService {
-  resetCache() {
-    this.exchange = initCacheExchange()
-  }
-}
-
-const sharedService = new MySharedService({
-  exchange: initCacheExchange(),
-})
-
-exposeSharedService(sharedService)
-```
-
-**app.tsx**
-
-```ts
-import { createClient, fetchExchange } from 'urql'
-import { proxySharedExchange, proxySharedService } from '@repliql/shared-exchange'
-
-const worker = new SharedWorker('worker.ts')
-
-// Get a proxy to call custom methods on SharedService
-const sharedService = proxySharedService({ endpoint: worker.port })
-
-const urqlClient = createClient({
-  url: 'https://api.app/graphql',
-  exchanges: [proxySharedExchange({ sharedService }), fetchExchange],
-})
-
-// Call shared service method from any spoke
-export function handleLogout() {
-  sharedService.resetCache()
-  // Cache is now cleared for all connected tabs
+class SharedExchangeService implements SharedService<SharedExchange> {
+  exchange: Exchange  // assignable for hot-swap
+  constructor(config: { exchange: Exchange })
 }
 ```
 
-## API Reference
+Hub-side wrapper. Register it as a service on a [`SharedServicesManager`](https://www.npmjs.com/package/@repliql/shared-service) under whatever name you want (e.g. `sharedExchange`).
 
-### SharedService
-
-The hub-side exchange wrapper. Manages state synchronization and operation deduplication.
+### `proxySharedExchange`
 
 ```ts
-class SharedService {
-  exchange: Exchange
-  constructor(options: { exchange: Exchange })
-}
+function proxySharedExchange(config: {
+  sharedExchange: Remote<SharedExchange>
+}): Exchange
 ```
 
-**Properties:**
+Spoke-side URQL exchange. Obtain `sharedExchange` from `wrapSharedServices` (in [`@repliql/shared-service/tab`](https://www.npmjs.com/package/@repliql/shared-service)), then pass it here.
 
-- `exchange` – The underlying URQL exchange (assignable for hot-swapping)
+## License
 
-### exposeSharedService()
-
-Exposes a `SharedService` instance to all connecting spokes. Call once in your shared worker or main process.
-
-```ts
-function exposeSharedService(service: SharedService): void
-```
-
-### proxySharedExchange()
-
-Creates a spoke-side exchange that proxies all operations to the hub. Drop this into your URQL client's exchange chain.
-
-```ts
-function proxySharedExchange(
-  config: { endpoint: MessagePort } | { sharedService: SharedService },
-): Exchange
-```
-
-**Parameters:**
-
-- `endpoint` – MessagePort from SharedWorker or main process
-- `sharedService` – Optional proxy reference to call custom methods
-
-### proxySharedService()
-
-Gets a proxy reference to the hub's `SharedService` instance. Allows calling custom methods exposed by extended `SharedService` classes.
-
-```ts
-function proxySharedService(config: { endpoint: MessagePort }): any
-```
-
-## Use Cases
-
-- **Multi-Tab Synchronization** – Share cache and optimistic updates across browser tabs
-- **Offline-First Apps** – Centralize offline state detection and retry logic
-- **Electron Apps** – Keep data in sync between main and renderer processes
-- **SSO Integration** – Share authentication state across tabs
+MIT

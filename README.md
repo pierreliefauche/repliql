@@ -6,6 +6,22 @@ Repliql is an offline-first cache and local database extension for [URQL](https:
 
 The core package provides a URQL exchange that replaces document-cache or normalized cache solutions, offering persistent, offline-first data storage with efficient querying and synchronization capabilities.
 
+## Packages
+
+| Package | Description |
+| --- | --- |
+| [`@repliql/repliql`](packages/repliql) | Offline-first URQL exchange backed by a local SQLite database. The headline package. |
+| [`@repliql/reactive-kysely`](packages/reactive-kysely) | Reactive queries for Kysely — `liveQuery()` re-emits when underlying rows change. |
+| [`@repliql/kysely-driver-bridge`](packages/kysely-driver-bridge) | Bridge a Kysely driver across processes (tab ↔ shared worker ↔ dedicated worker) over Comlink. |
+| [`@repliql/shared-exchange`](packages/shared-exchange) | Share a single URQL exchange across multiple tabs / renderer processes. |
+| [`@repliql/shared-service`](packages/shared-service) | Per-tab service instances exposed from a SharedWorker, with automatic tab-death detection. |
+| [`@repliql/conduit`](packages/conduit) | SharedWorker with dedicated-worker powers via leader election (e.g. for OPFS access). |
+| [`@repliql/utils`](packages/utils) | Shared utilities: hashing, stable serialization, GraphQL execution, URQL helpers. |
+
+Playgrounds:
+
+- [`playgrounds/linear`](playgrounds/linear) — end-to-end demo wiring all the pieces together against the Linear GraphQL API.
+
 ## Use-cases
 
 - Large datasets
@@ -23,7 +39,7 @@ Typical applications:
 
 ## Milestones
 
-#### 👎 0.1.0 Hub & spoke exchange
+#### 🤞 0.1.0 Hub & spoke exchange
 
 Scaffold URQL exchange working as hub & spoke: a central hub running in a shared worker connected to spoke exchanges in each web page.
 
@@ -57,7 +73,7 @@ Local resolution with access to read the DB.
 Apply optimistic mutation patches to entities in DB via mutation resolvers.
 Undo patch if mutation fails (maybe).
 
-#### 0.8.0 Offline mutations
+#### 🚧 0.8.0 Offline mutations
 
 Store optimistic mutations in DB. Mutations are processed by a worker async.
 

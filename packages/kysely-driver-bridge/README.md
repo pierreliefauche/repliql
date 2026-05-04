@@ -4,14 +4,63 @@
 
 Bridge a [Kysely driver](https://kysely-org.github.io/kysely-apidoc/interfaces/Driver.html) from one process to another. Enables using Kysely from a web tab with SQLite running in a shared/dedicated worker, or using Kysely from a shared worker with SQLite running in a dedicated worker.
 
+## Install
+
+```bash
+npm install @repliql/kysely-driver-bridge kysely comlink
+# or
+bun add @repliql/kysely-driver-bridge kysely comlink
+```
+
+[`kysely`](https://www.npmjs.com/package/kysely) and [`comlink`](https://www.npmjs.com/package/comlink) are peer dependencies.
+
 ## How It Works
 
 [Comlink](https://www.npmjs.com/package/comlink) is used for inter-process communication. `@repliql/conduit` can be used to expose a leader DB running in a dedicated worker to a shared worker.
 
 The package ships two halves:
 
-- **`DriverBridge`** — lives in the worker that owns the real Kysely `Driver`. Exposes flat, Comlink-cloneable methods keyed by a `connectionId` string. Built from a factory `() => Driver`.
+- **`DriverBridge`** — lives in the worker that owns the real Kysely `Driver`. Exposes flat, Comlink-cloneable methods keyed by a `connectionId` string. Built from a `createDriver: () => Driver` factory plus a `createCallbackFunction` hook (see below).
 - **`BridgedDriver`** — lives in the consumer (tab or shared worker). Implements Kysely's `Driver` interface and forwards every call to a `Comlink.Remote<DriverBridge>`.
+
+## Callback functions across the bridge
+
+SQLite-style drivers expose **user-defined callback functions** — JS functions that the database invokes from inside SQL (e.g. SQLite triggers calling back into JS via `node-sqlite3-wasm`'s `database.function(...)`). Because the driver runs in one process and the consumer in another, you can't just pass a function literal — it has to cross the Comlink boundary.
+
+The bridge exposes a single registration entry point that you wire into your driver of choice:
+
+```ts
+import { DriverBridge } from '@repliql/kysely-driver-bridge/shared'
+
+const bridge = new DriverBridge({
+  createDriver: () => kyselyDialect.createDriver(),
+  createCallbackFunction: (name, cb) => {
+    // Register `cb` with your underlying SQLite driver under `name`.
+    // Example with node-sqlite3-wasm:
+    database.function(name, (...args) => cb(...args))
+  },
+})
+```
+
+Then on the **consumer** side, call `remote.createCallbackFunction(name, Comlink.proxy(fn))` whenever you need to register a JS callback the DB can invoke. [`@repliql/reactive-kysely`](https://www.npmjs.com/package/@repliql/reactive-kysely) uses this to wire its trigger-driven change notifications.
+
+### Replaying registrations across leader changes (shared → dedicated)
+
+When the consumer is a shared worker talking to a dedicated-worker leader (via [`@repliql/conduit`](https://www.npmjs.com/package/@repliql/conduit)), the dedicated worker can change. Callbacks registered with the previous leader are gone. The package ships a helper that re-registers them automatically on each new leader:
+
+```ts
+import { conduit } from '@repliql/conduit/shared'
+import { BridgedDriver, replayCreateCallbackFunction } from '@repliql/kysely-driver-bridge/shared'
+
+const { wrapDedicatedWorker, events } = conduit()
+
+const remoteBridge = wrapDedicatedWorker<DriverBridge>()
+
+const createCallbackFunction = replayCreateCallbackFunction({ events })
+// Hand `createCallbackFunction` to whatever needs to register callbacks
+// (e.g. ReactiveKysely's config). It internally remembers every registration
+// and replays them on `events.leaderElected`.
+```
 
 ## Example: Access SQLite running in a shared worker from a main tab
 
@@ -22,8 +71,14 @@ import { DriverBridge } from '@repliql/kysely-driver-bridge/shared'
 import * as Comlink from 'comlink'
 
 const kyselyDialect = ... // instantiate a Kysely SQLite dialect however you please
+const database = ... // the underlying driver-specific handle (e.g. node-sqlite3-wasm Database)
 
-const bridge = new DriverBridge(() => kyselyDialect.createDriver())
+const bridge = new DriverBridge({
+  createDriver: () => kyselyDialect.createDriver(),
+  createCallbackFunction: (name, cb) => {
+    database.function(name, (...args) => cb(...args))
+  },
+})
 
 onconnect = e => Comlink.expose<DriverBridge>(bridge, e.ports[0])
 ```
@@ -59,8 +114,14 @@ import { conduit } from '@repliql/conduit/dedicated'
 import * as Comlink from 'comlink'
 
 const kyselyDialect = ... // instantiate a Kysely SQLite dialect however you please
+const database = ... // the underlying driver-specific handle
 
-const bridge = new DriverBridge(() => kyselyDialect.createDriver())
+const bridge = new DriverBridge({
+  createDriver: () => kyselyDialect.createDriver(),
+  createCallbackFunction: (name, cb) => {
+    database.function(name, (...args) => cb(...args))
+  },
+})
 
 conduit({
   onElectedLeader(port) {
@@ -73,12 +134,17 @@ conduit({
 
 ```ts
 import { conduit } from '@repliql/conduit/shared'
-import { type DriverBridge, BridgedDriver } from '@repliql/kysely-driver-bridge/shared'
+import {
+  type DriverBridge,
+  BridgedDriver,
+  replayCreateCallbackFunction,
+} from '@repliql/kysely-driver-bridge/shared'
 import { Kysely, SqliteAdapter, SqliteIntrospector, SqliteQueryCompiler } from 'kysely'
 
-const { wrapDedicatedWorker } = conduit()
+const { wrapDedicatedWorker, events } = conduit()
 
 const remoteBridge = wrapDedicatedWorker<DriverBridge>()
+const createCallbackFunction = replayCreateCallbackFunction({ events })
 
 const db = new Kysely({
   dialect: {

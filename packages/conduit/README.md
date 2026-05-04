@@ -7,11 +7,15 @@ It is useful to give a SharedWorker capabilities of dedicated Workers, with auto
 
 Main application is to access OPFS from dedicated Worker transparently from SharedWorker.
 
-## Installation
+## Install
 
 ```bash
-npm install @repliql/conduit
+npm install @repliql/conduit comlink
+# or
+bun add @repliql/conduit comlink
 ```
+
+[`comlink`](https://www.npmjs.com/package/comlink) is a peer dependency.
 
 ## How It Works
 

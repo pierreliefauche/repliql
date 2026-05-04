@@ -1,16 +1,20 @@
 # @repliql/reactive-kysely
 
-> **Reactive queries for [Kysely](https://github.com/kysely-org/kysely)** — live-updating query results that automatically re-emit when underlying data changes.
+> **Reactive queries for [`kysely`](https://www.npmjs.com/package/kysely)** — live-updating query results that automatically re-emit when underlying data changes.
 
 ## Install
 
 ```bash
-npm install @repliql/reactive-kysely
+npm install @repliql/reactive-kysely kysely
 # or
-bun add @repliql/reactive-kysely
+bun add @repliql/reactive-kysely kysely
 ```
 
-Kysely is a peer dependency.
+[`kysely`](https://www.npmjs.com/package/kysely) is a peer dependency. [`react`](https://www.npmjs.com/package/react) is an optional peer dependency required only if you import `@repliql/reactive-kysely/react`:
+
+```bash
+npm install @repliql/reactive-kysely kysely react
+```
 
 ## Quick Start
 
@@ -68,7 +72,7 @@ const db = new ReactiveKysely<DB>({
 
 #### `liveQuery(query, options?)`
 
-Returns a [Wonka](https://github.com/0no-co/wonka) `Source<Result[]>` that:
+Returns a [`wonka`](https://www.npmjs.com/package/wonka) `Source<Result[]>` that:
 
 1. Emits the initial query result on subscription
 2. Re-emits when data changes that could affect the result
