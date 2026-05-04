@@ -1,6 +1,6 @@
 {
   "name": "@repliql/kysely-driver-bridge",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Bridge a Kysely driver across processes via Comlink",
   "license": "MIT",
   "author": "RepliQL Contributors",
