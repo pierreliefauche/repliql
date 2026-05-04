@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Build Script for RepliQL Monorepo
- * Orchestrates building all library packages and the playground
+ * Orchestrates building all library packages
  * Builds packages in dependency order to ensure declaration files are available
  */
 
