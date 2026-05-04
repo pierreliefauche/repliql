@@ -16,7 +16,8 @@
     "fmt:check": "oxfmt --check .",
     "lint": "oxlint .",
     "test": "bun test --config=bunfig.jsonc",
-    "test:watch": "bun test --config=bunfig.jsonc --watch"
+    "test:watch": "bun test --config=bunfig.jsonc --watch",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "latest",
