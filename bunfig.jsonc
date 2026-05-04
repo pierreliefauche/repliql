@@ -12,7 +12,7 @@
     "root": ".",
     "pathIgnorePatterns": ["vendors/**"],
     "coverage": true,
-    "coveragePathIgnorePatterns": ["**/dist/**", "*.ts"],
+    "coveragePathIgnorePatterns": ["**/dist/**", "*.ts", "**/test-utils/**"],
   },
 
   // Build configuration defaults

@@ -243,4 +243,99 @@ describe('operationsRegistry', () => {
       expect(reg.get(999)).toBeUndefined()
     })
   })
+
+  describe('edge cases', () => {
+    it('evict on non-evictable key is a no-op (lru scenario)', () => {
+      // This tests the early return in evict() when key is not in evictableKeys
+      // In LRU, when we exceed size, we evict the oldest key in lruQueue,
+      // but if that key isn't evictable (wasn't torn down), the evict is a no-op
+      const onEvict = mock(() => {})
+      const reg = makeOperationsRegistry({
+        kinds: ['query'],
+        eviction: { strategy: 'lru', size: 2 },
+        onAdd: op => op.key,
+        onEvict,
+      })
+
+      const a = queryOp(1)
+      const b = queryOp(2)
+      const c = queryOp(3)
+
+      reg.spy(a)
+      reg.spy(b)
+      reg.spy(teardownOf(a)) // a is now evictable
+      reg.spy(teardownOf(b)) // b is now evictable
+      reg.spy(a) // re-execute a - removes from evictableKeys, moves to end of lru
+      // lruQueue is now [b, a], only b is evictable
+      reg.spy(c) // triggers lru eviction: b is oldest and evictable, gets evicted
+
+      // a should NOT be evicted because it's not evictable (was re-executed)
+      expect(reg.get(a.key)).toBe(a.key)
+      // b should be evicted
+      expect(reg.get(b.key)).toBeUndefined()
+      expect(onEvict).toHaveBeenCalledTimes(1)
+      expect(onEvict).toHaveBeenCalledWith(b.key, b.key)
+    })
+
+    it('lru eviction skips non-evictable keys until it finds an evictable one', () => {
+      // Tests the early return branch in evict() when key is not evictable
+      const onEvict = mock(() => {})
+      const reg = makeOperationsRegistry({
+        kinds: ['query'],
+        eviction: { strategy: 'lru', size: 1 },
+        onAdd: op => op.key,
+        onEvict,
+      })
+
+      const a = queryOp(1)
+      const b = queryOp(2)
+
+      reg.spy(a)
+      // a is in lruQueue, not evictable
+      reg.spy(b)
+      // b added, lruQueue = [a, b], size 2 > 1
+      // evict(a) called, but a is not evictable (not torn down), so early return
+      // lruQueue is now [b] after delete(a), size = 1, loop ends
+
+      // a is still in registry because it wasn't evictable
+      expect(reg.get(a.key)).toBe(a.key)
+      expect(reg.get(b.key)).toBe(b.key)
+      expect(onEvict).not.toHaveBeenCalled()
+    })
+
+    it('double teardown with delayed eviction does not schedule twice', async () => {
+      // This tests the early return in scheduleEviction() when key is already evictable
+      const onEvict = mock(() => {})
+      const reg = makeOperationsRegistry({
+        kinds: ['query'],
+        eviction: { strategy: 'delayed', delayMs: 10 },
+        onAdd: op => op.key,
+        onEvict,
+      })
+
+      const a = queryOp(1)
+      reg.spy(a)
+      reg.spy(teardownOf(a))
+      reg.spy(teardownOf(a)) // second teardown should not create second timer
+
+      await sleep(25)
+
+      expect(onEvict).toHaveBeenCalledTimes(1)
+    })
+
+    it('has() returns true for existing keys and false otherwise', () => {
+      const reg = makeOperationsRegistry({
+        kinds: ['query'],
+        eviction: { strategy: 'immediate' },
+        onAdd: op => op.key,
+      })
+
+      const a = queryOp(1)
+      expect(reg.has(a.key)).toBe(false)
+      reg.spy(a)
+      expect(reg.has(a.key)).toBe(true)
+      reg.spy(teardownOf(a))
+      expect(reg.has(a.key)).toBe(false)
+    })
+  })
 })

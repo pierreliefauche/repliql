@@ -82,5 +82,64 @@ describe('SourceMap', () => {
       expect(result).toBe(replacement)
       expect(factory).toHaveBeenCalledTimes(1)
     })
+
+    it('get returns undefined when WeakRef is collected but key still exists', async () => {
+      const map = new SourceMap<number>()
+      const key = phash('gc-test')
+
+      // Create a source that will be garbage collected
+      map.getOrCreate(key, () => makeSource())
+
+      // Force garbage collection
+      Bun.gc(true)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      Bun.gc(true)
+
+      // The key still exists in the map, but WeakRef.deref() returns undefined
+      const result = map.get(key)
+      expect(result).toBeUndefined()
+    })
+  })
+
+  describe('edge cases', () => {
+    it('handles numeric hash keys', () => {
+      const map = new SourceMap<string>()
+      const source = makeSource<string>()
+      const key = phash('test')
+      expect(typeof key).toBe('number')
+      map.getOrCreate(key, () => source)
+      expect(map.get(key)).toBe(source)
+    })
+
+    it('different keys do not interfere with each other', () => {
+      const map = new SourceMap<number>()
+      const key1 = phash('first')
+      const key2 = phash('second')
+      const key3 = phash('third')
+
+      const source1 = makeSource()
+      const source2 = makeSource()
+      const source3 = makeSource()
+
+      map.getOrCreate(key1, () => source1)
+      map.getOrCreate(key2, () => source2)
+      map.getOrCreate(key3, () => source3)
+
+      expect(map.get(key1)).toBe(source1)
+      expect(map.get(key2)).toBe(source2)
+      expect(map.get(key3)).toBe(source3)
+    })
+
+    it('factory function is only called once per unique key', () => {
+      const map = new SourceMap<number>()
+      const key = phash('once')
+      const factory = mock(() => makeSource())
+
+      map.getOrCreate(key, factory)
+      map.getOrCreate(key, factory)
+      map.getOrCreate(key, factory)
+
+      expect(factory).toHaveBeenCalledTimes(1)
+    })
   })
 })

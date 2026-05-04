@@ -1114,6 +1114,78 @@ const tests: TestCase[] = [
       filter: { users: [{ deleted: { $in: [false] } }] },
     },
   },
+  // ---- edge cases for coverage ----
+  {
+    it: 'subquery with raw sql in select triggers filter widening',
+    query: db
+      .selectFrom('users')
+      .select(['id'])
+      .where('id', 'in', db.selectFrom('posts').select(sql<number>`random()`.as('r'))),
+    result: {
+      selection: { users: { id: true } },
+      filter: MATCH_ALL,
+    },
+  },
+  {
+    it: 'OR with unqualified column AND joined tables spreads filter to all queried tables',
+    query: db
+      .selectFrom('users')
+      .innerJoin('posts', 'posts.user_id', 'users.id')
+      .select(['users.id', 'posts.title'])
+      .where(eb => eb.or([eb('name', '=', 'John'), eb('tag', '=', 'tech')])),
+    result: {
+      selection: { users: { id: true }, posts: { title: true } },
+      filter: {
+        users: [{ name: { $in: ['John'] } }, { tag: { $in: ['tech'] } }],
+        posts: [{ name: { $in: ['John'] } }, { tag: { $in: ['tech'] } }],
+      },
+    },
+  },
+  {
+    it: 'raw sql in WHERE with unqualified = spreads narrow filter to both tables',
+    query: db
+      .selectFrom('users')
+      .innerJoin('posts', 'posts.user_id', 'users.id')
+      .select(['users.id', 'posts.title'])
+      .where('name', '=', 'John')
+      .where(sql`true`),
+    result: {
+      selection: { users: { id: true }, posts: { title: true } },
+      filter: {
+        users: [{ name: { $in: ['John'] } }],
+        posts: [{ name: { $in: ['John'] } }],
+      },
+    },
+  },
+  {
+    it: 'deeply nested JSON field predicate with multiple levels',
+    query: db
+      .selectFrom('users')
+      .select(['id'])
+      .where(eb => eb(eb.ref('metadata', '->>').key('nested').key('deep').key('value'), '=', 42)),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ metadata: { nested: { deep: { value: { $in: [42] } } } } }] },
+    },
+  },
+  {
+    it: 'subquery with raw sql WHERE propagates narrow filter entries',
+    query: db
+      .selectFrom('users')
+      .select(['id'])
+      .where(
+        'id',
+        'in',
+        db
+          .selectFrom('posts')
+          .select('user_id')
+          .where(sql`random() > 0.5`),
+      ),
+    result: {
+      selection: { users: { id: true } },
+      filter: { users: [{ id: MATCH_ALL }], posts: [{ user_id: MATCH_ALL }] },
+    },
+  },
 ]
 
 describe('queryToChangeSubscription', () => {

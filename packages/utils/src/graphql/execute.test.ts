@@ -402,4 +402,94 @@ describe('execute', () => {
     })
     expect(ambiguous.errors?.length).toBe(1)
   })
+
+  it('reports error when named operation is not found', async () => {
+    const doc = parse(`query A { a }`)
+    const result = await execute({
+      document: doc,
+      context: {},
+      operationName: 'NotFound',
+      fieldResolver: () => 1,
+    })
+    expect(result.data).toBeUndefined()
+    expect(result.errors?.length).toBe(1)
+    expect(result.errors![0].message).toContain('NotFound')
+  })
+
+  it('handles non-Error thrown values gracefully', async () => {
+    const doc = parse(`{ bad }`)
+    const result = await execute({
+      document: doc,
+      context: {},
+      fieldResolver: () => {
+        throw 'string error'
+      },
+    })
+    expect(result.data).toEqual({ bad: null })
+    expect(result.errors?.length).toBe(1)
+    expect(result.errors![0].message).toBe('string error')
+  })
+
+  it('preserves existing path on GraphQLError', async () => {
+    const doc = parse(`{ bad }`)
+    const result = await execute({
+      document: doc,
+      context: {},
+      fieldResolver: () => {
+        throw new GraphQLError('already has path', null, null, null, ['existing', 'path'])
+      },
+    })
+    expect(result.data).toEqual({ bad: null })
+    expect(result.errors?.length).toBe(1)
+    expect(result.errors![0].path).toEqual(['existing', 'path'])
+  })
+
+  it('handles errors thrown from array item resolution', async () => {
+    const doc = parse(`{
+      items {
+        id
+        value
+      }
+    }`)
+    const items = [
+      { id: '1', value: 'ok' },
+      { id: '2', value: 'ok' },
+    ]
+    const result = await execute({
+      document: doc,
+      context: {},
+      fieldResolver: (src, _args, _ctx, info) => {
+        if (info.fieldName === 'items') return items
+        if (info.fieldName === 'id') return (src as { id: string }).id
+        if (info.fieldName === 'value') {
+          if ((src as { id: string }).id === '2') throw new Error('item error')
+          return (src as { value: string }).value
+        }
+      },
+    })
+    expect(result.data).toEqual({
+      items: [
+        { id: '1', value: 'ok' },
+        { id: '2', value: null },
+      ],
+    })
+    expect(result.errors?.length).toBe(1)
+    expect(result.errors![0].path).toEqual(['items', 1, 'value'])
+  })
+
+  it('handles resolver returning a rejected promise in array items', async () => {
+    const doc = parse(`{ items }`)
+    const result = await execute({
+      document: doc,
+      context: {},
+      fieldResolver: (_src, _args, _ctx, info) => {
+        if (info.fieldName === 'items') {
+          return [Promise.resolve('a'), Promise.reject(new Error('rejected')), Promise.resolve('c')]
+        }
+      },
+    })
+    expect(result.data).toEqual({ items: ['a', null, 'c'] })
+    expect(result.errors?.length).toBe(1)
+    expect(result.errors![0].path).toEqual(['items', 1])
+  })
 })

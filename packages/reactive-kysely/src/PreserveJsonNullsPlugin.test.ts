@@ -213,3 +213,71 @@ describe('toJsonbPreserveNulls', () => {
     expect(toJsonbPreserveNulls([1, null])).toBe(`[1,${JSON.stringify(NULL_SENTINEL)}]`)
   })
 })
+
+describe('transform edge cases', () => {
+  it('preserveJsonNulls skips inherited properties (only transforms own properties)', () => {
+    const proto = { inherited: null }
+    const obj = Object.create(proto) as { own: null; inherited?: unknown }
+    obj.own = null
+
+    const result = preserveJsonNulls(obj)
+    expect(result.own).toBe(NULL_SENTINEL)
+    // Inherited property is not transformed, it should still be null when accessed via prototype
+    expect(Object.prototype.hasOwnProperty.call(result, 'inherited')).toBe(false)
+  })
+
+  it('preserveJsonNulls does not transform non-plain objects like Map', () => {
+    const map = new Map([['key', null]])
+    const result = preserveJsonNulls(map)
+    expect(result).toBe(map)
+    expect(result.get('key')).toBe(null) // unchanged
+  })
+
+  it('preserveJsonNulls does not transform RegExp objects', () => {
+    const regex = /test/
+    const result = preserveJsonNulls(regex)
+    expect(result).toBe(regex)
+  })
+
+  it('preserveJsonNulls handles arrays containing non-plain objects', () => {
+    const date = new Date('2024-01-01')
+    const input: unknown[] = [null, date, { nested: null }]
+    const result = preserveJsonNulls(input)
+
+    expect(result[0]).toBe(NULL_SENTINEL)
+    expect(result[1]).toBe(date) // Date object unchanged
+    expect(result[2]).toEqual({ nested: NULL_SENTINEL })
+  })
+
+  it('PreserveJsonNullsPlugin handles rows with mixed special objects', async () => {
+    const plugin = new PreserveJsonNullsPlugin()
+    const date = new Date('2024-01-01')
+    const rows = await transformRows(plugin, [
+      {
+        id: 1,
+        createdAt: date as unknown as string,
+        data: { nullField: NULL_SENTINEL, otherField: 'ok' },
+        tags: [NULL_SENTINEL, 'tag1'],
+      },
+    ])
+
+    expect(rows[0]!.id).toBe(1)
+    expect(rows[0]!.createdAt).toBe(date)
+    expect(rows[0]!.data).toEqual({ nullField: null, otherField: 'ok' })
+    expect(rows[0]!.tags).toEqual([null, 'tag1'])
+  })
+
+  it('preserveJsonNulls handles empty objects', () => {
+    const input = {}
+    const result = preserveJsonNulls(input)
+    expect(result).toBe(input)
+    expect(result).toEqual({})
+  })
+
+  it('preserveJsonNulls handles empty arrays', () => {
+    const input: unknown[] = []
+    const result = preserveJsonNulls(input)
+    expect(result).not.toBe(input) // arrays return new array via map
+    expect(result).toEqual([])
+  })
+})
