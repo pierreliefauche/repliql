@@ -1,6 +1,6 @@
 {
   "name": "@repliql/repliql",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Offline-first cache and local database extension for URQL",
   "keywords": [
     "cache",

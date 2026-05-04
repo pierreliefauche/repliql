@@ -1,6 +1,6 @@
 {
   "name": "@repliql/conduit",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "SharedWorker, with dedicated Worker powers",
   "license": "MIT",
   "author": "RepliQL Contributors",
