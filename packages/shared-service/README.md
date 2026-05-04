@@ -35,10 +35,7 @@ export type MyCalculator = {
 ### shared.worker.ts — the hub
 
 ```ts
-import {
-  SharedServicesManager,
-  type SharedService,
-} from '@repliql/shared-service/shared'
+import { SharedServicesManager, type SharedService } from '@repliql/shared-service/shared'
 import * as Comlink from 'comlink'
 
 import type { MyCalculator } from './MyCalculator'
@@ -66,10 +63,7 @@ onconnect = e => Comlink.expose(manager.connector, e.ports[0])
 ### tab.ts — the spoke
 
 ```ts
-import {
-  wrapSharedServices,
-  type SharedServicesConnector,
-} from '@repliql/shared-service/tab'
+import { wrapSharedServices, type SharedServicesConnector } from '@repliql/shared-service/tab'
 import * as Comlink from 'comlink'
 
 import type { MyCalculator } from './MyCalculator'

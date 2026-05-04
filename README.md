@@ -8,15 +8,15 @@ The core package provides a URQL exchange that replaces document-cache or normal
 
 ## Packages
 
-| Package | Description |
-| --- | --- |
-| [`@repliql/repliql`](packages/repliql) | Offline-first URQL exchange backed by a local SQLite database. The headline package. |
-| [`@repliql/reactive-kysely`](packages/reactive-kysely) | Reactive queries for Kysely — `liveQuery()` re-emits when underlying rows change. |
+| Package                                                          | Description                                                                                    |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [`@repliql/repliql`](packages/repliql)                           | Offline-first URQL exchange backed by a local SQLite database. The headline package.           |
+| [`@repliql/reactive-kysely`](packages/reactive-kysely)           | Reactive queries for Kysely — `liveQuery()` re-emits when underlying rows change.              |
 | [`@repliql/kysely-driver-bridge`](packages/kysely-driver-bridge) | Bridge a Kysely driver across processes (tab ↔ shared worker ↔ dedicated worker) over Comlink. |
-| [`@repliql/shared-exchange`](packages/shared-exchange) | Share a single URQL exchange across multiple tabs / renderer processes. |
-| [`@repliql/shared-service`](packages/shared-service) | Per-tab service instances exposed from a SharedWorker, with automatic tab-death detection. |
-| [`@repliql/conduit`](packages/conduit) | SharedWorker with dedicated-worker powers via leader election (e.g. for OPFS access). |
-| [`@repliql/utils`](packages/utils) | Shared utilities: hashing, stable serialization, GraphQL execution, URQL helpers. |
+| [`@repliql/shared-exchange`](packages/shared-exchange)           | Share a single URQL exchange across multiple tabs / renderer processes.                        |
+| [`@repliql/shared-service`](packages/shared-service)             | Per-tab service instances exposed from a SharedWorker, with automatic tab-death detection.     |
+| [`@repliql/conduit`](packages/conduit)                           | SharedWorker with dedicated-worker powers via leader election (e.g. for OPFS access).          |
+| [`@repliql/utils`](packages/utils)                               | Shared utilities: hashing, stable serialization, GraphQL execution, URQL helpers.              |
 
 Playgrounds:
 

@@ -60,10 +60,7 @@ You can register more services on the same manager — for example a Kysely driv
 
 ```ts
 import { proxySharedExchange, type SharedExchange } from '@repliql/shared-exchange/tab'
-import {
-  wrapSharedServices,
-  type SharedServicesConnector,
-} from '@repliql/shared-service/tab'
+import { wrapSharedServices, type SharedServicesConnector } from '@repliql/shared-service/tab'
 import { Client, fetchExchange } from '@urql/core'
 import { wrap } from 'comlink'
 
@@ -104,7 +101,7 @@ The hub can run in the Electron main process; renderers connect with a `MessageP
 
 ```ts
 class SharedExchangeService implements SharedService<SharedExchange> {
-  exchange: Exchange  // assignable for hot-swap
+  exchange: Exchange // assignable for hot-swap
   constructor(config: { exchange: Exchange })
 }
 ```
@@ -114,9 +111,7 @@ Hub-side wrapper. Register it as a service on a [`SharedServicesManager`](https:
 ### `proxySharedExchange`
 
 ```ts
-function proxySharedExchange(config: {
-  sharedExchange: Remote<SharedExchange>
-}): Exchange
+function proxySharedExchange(config: { sharedExchange: Remote<SharedExchange> }): Exchange
 ```
 
 Spoke-side URQL exchange. Obtain `sharedExchange` from `wrapSharedServices` (in [`@repliql/shared-service/tab`](https://www.npmjs.com/package/@repliql/shared-service)), then pass it here.
