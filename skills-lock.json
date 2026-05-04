@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "bun": {
+      "source": "bun.sh",
+      "sourceType": "well-known",
+      "computedHash": "aa2f0425603c9dfc58bf707c051cf8ad4b117e897e602b3f65995c4f6f95d2b2"
+    },
     "changesets": {
       "source": "oakoss/agent-skills",
       "sourceType": "github",
