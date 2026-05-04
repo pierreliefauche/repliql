@@ -330,6 +330,16 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
           .selectFrom('mutations')
           .select('id')
           .where('status', '=', 'pending')
+          .where(eb =>
+            eb.not(
+              eb.exists(
+                eb
+                  .selectFrom('mutations as m2')
+                  .select('m2.id')
+                  .where('m2.status', '=', 'inflight'),
+              ),
+            ),
+          )
           .orderBy('$createdAt', 'asc')
           .limit(1),
       )
