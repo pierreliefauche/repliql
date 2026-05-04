@@ -7,6 +7,48 @@ import { PriorityBadge } from '@/components/PriorityBadge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ISSUES_QUERY } from '@/graphql/queries'
 
+function IssueItem({ issue }: { issue: any }) {
+  return (
+    <Link
+      to={`/${issue.id}`}
+      className={active =>
+        `flex items-center gap-4 px-4 py-3 transition-colors hover:bg-secondary/50 cursor-pointer ${
+          active ? 'bg-secondary/50' : ''
+        }`
+      }
+    >
+      {issue.state && (
+        <div
+          className="h-3 w-3 shrink-0 rounded-full"
+          style={{ backgroundColor: issue.state.color }}
+          title={issue.state.name}
+        />
+      )}
+      <span className="shrink-0 text-xs font-mono text-muted-foreground">{issue.identifier}</span>
+      <span className="flex-1 truncate text-sm">{issue.title}</span>
+      <PriorityBadge priority={issue.priority} />
+      {issue.assignee && (
+        <div className="flex items-center gap-1.5">
+          {issue.assignee.avatarUrl ? (
+            <img
+              src={issue.assignee.avatarUrl}
+              alt={issue.assignee.name}
+              className="h-5 w-5 rounded-full"
+            />
+          ) : (
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[10px] font-medium text-primary">
+              {issue.assignee.name?.[0]}
+            </div>
+          )}
+        </div>
+      )}
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {DateTime.fromISO(issue.updatedAt).toRelative()}
+      </span>
+    </Link>
+  )
+}
+
 export function IssuesView() {
   const [, navigate] = useLocation()
   const [{ data, fetching, error }] = useQuery({
@@ -38,46 +80,7 @@ export function IssuesView() {
         ) : (
           <div className="divide-y divide-border rounded-lg border">
             {data?.issues?.nodes?.map((issue: any) => (
-              <Link
-                key={issue.id}
-                to={`/${issue.id}`}
-                className={active =>
-                  `flex items-center gap-4 px-4 py-3 transition-colors hover:bg-secondary/50 cursor-pointer ${
-                    active ? 'bg-secondary/50' : ''
-                  }`
-                }
-              >
-                {issue.state && (
-                  <div
-                    className="h-3 w-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: issue.state.color }}
-                    title={issue.state.name}
-                  />
-                )}
-                <span className="shrink-0 text-xs font-mono text-muted-foreground">
-                  {issue.identifier}
-                </span>
-                <span className="flex-1 truncate text-sm">{issue.title}</span>
-                <PriorityBadge priority={issue.priority} />
-                {issue.assignee && (
-                  <div className="flex items-center gap-1.5">
-                    {issue.assignee.avatarUrl ? (
-                      <img
-                        src={issue.assignee.avatarUrl}
-                        alt={issue.assignee.name}
-                        className="h-5 w-5 rounded-full"
-                      />
-                    ) : (
-                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[10px] font-medium text-primary">
-                        {issue.assignee.name?.[0]}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {DateTime.fromISO(issue.updatedAt).toRelative()}
-                </span>
-              </Link>
+              <IssueItem key={issue.id} issue={issue} />
             ))}
           </div>
         )}
