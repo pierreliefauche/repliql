@@ -4,6 +4,11 @@
   "description": "Bridge a Kysely driver across processes via Comlink",
   "license": "MIT",
   "author": "RepliQL Contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pierreliefauche/repliql",
+    "directory": "packages/kysely-driver-bridge"
+  },
   "files": [
     "dist"
   ],
