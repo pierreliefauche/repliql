@@ -1,10 +1,11 @@
 import type { ReactiveKysely } from '@repliql/reactive-kysely'
 import { toJsonbPreserveNulls } from '@repliql/reactive-kysely'
 import { Entity, EntityRef, getEntityRef, isPrimitive, Primitive } from '@repliql/utils'
-import { type MigrationResultSet, Migrator, Selectable, sql } from 'kysely'
+import { type MigrationResultSet, Migrator, Selectable, sql, Transaction } from 'kysely'
 
 import {
   ACTIVE_MUTATION_STATUSES,
+  RESOLVED_MUTATION_STATUSES,
   type DatabaseSchema,
   type MutationStatus,
   type ResolvedMutationStatus,
@@ -27,18 +28,38 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
 
   public async migrate(): Promise<MigrationResultSet> {
     if (!this.migrationPromise) {
-      const migrator = new Migrator({
-        db: this.kysely,
-        migrationTableName: 'repliql_kysely_migration',
-        provider: {
-          async getMigrations() {
-            const { migrations } = await import('./migrations')
-            return migrations
-          },
-        },
-      })
+      this.migrationPromise = Promise.resolve().then(async () => {
+        await sql`
+          -- Enable cascading deletes
+          PRAGMA foreign_keys = ON;
+          -- WAL mode for better concurrency
+          PRAGMA journal_mode = WAL;
+          -- Increase cache size (in pages, default is 2000)
+          PRAGMA cache_size = 10000;
+          -- Disable synchronous writes for better performance
+          -- Level 1 is a good balance between safety and performance
+          PRAGMA synchronous = NORMAL;
+          -- Increase page size for better read performance (default 4096)
+          PRAGMA page_size = 8192;
+          -- Enable memory-mapped I/O for reading
+          PRAGMA mmap_size = 268435456;
+          -- Optimize for sequential writes
+          PRAGMA temp_store = MEMORY;
+        `.execute(this.kysely)
 
-      this.migrationPromise = migrator.migrateToLatest()
+        const migrator = new Migrator({
+          db: this.kysely,
+          migrationTableName: 'repliql_kysely_migration',
+          provider: {
+            async getMigrations() {
+              const { migrations } = await import('./migrations')
+              return migrations
+            },
+          },
+        })
+
+        return migrator.migrateToLatest()
+      })
     }
 
     return this.migrationPromise
@@ -49,14 +70,17 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
   }
 
   public async upsertEntities(args: {
+    trx?: Transaction<DatabaseSchema>
     entities: Entity[]
     byOperationKey: number
     isOptimistic: boolean
   }) {
-    const { entities, byOperationKey, isOptimistic } = args
+    const { trx, entities, byOperationKey, isOptimistic } = args
     if (entities.length === 0) {
       return
     }
+
+    const db = trx || this.client
 
     const $updatedAt = new Date().toISOString()
     const values = entities.map(data => ({
@@ -69,7 +93,7 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       updatedByOperationKey: byOperationKey,
     }))
 
-    const q = this.client
+    const q = db
       .insertInto('entities')
       .values(values)
       .onConflict(oc =>
@@ -266,29 +290,33 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
 
     // Record mutation patch
     const $updatedAt = new Date().toISOString()
-    await this.client
-      .insertInto('mutationPatches')
-      .values(
-        entities.map(({ __typename, id, ...patch }) => ({
-          mutationId,
-          entityRef: getEntityRef({ __typename, id }),
-          patch: toJsonbPreserveNulls(patch),
-          $updatedAt,
-        })),
-      )
-      .onConflict(oc =>
-        oc.columns(['mutationId', 'entityRef']).doUpdateSet(eb => ({
-          patch: eb.ref('excluded.patch'),
-          $updatedAt: eb.ref('excluded.$updatedAt'),
-        })),
-      )
-      .execute()
 
-    // Patch entities
-    return await this.upsertEntities({
-      byOperationKey,
-      isOptimistic: true,
-      entities,
+    return this.client.transaction().execute(async trx => {
+      await trx
+        .insertInto('mutationPatches')
+        .values(
+          entities.map(({ __typename, id, ...patch }) => ({
+            mutationId,
+            entityRef: getEntityRef({ __typename, id }),
+            patch: toJsonbPreserveNulls(patch),
+            $updatedAt,
+          })),
+        )
+        .onConflict(oc =>
+          oc.columns(['mutationId', 'entityRef']).doUpdateSet(eb => ({
+            patch: eb.ref('excluded.patch'),
+            $updatedAt: eb.ref('excluded.$updatedAt'),
+          })),
+        )
+        .execute()
+
+      // Patch entities
+      return await this.upsertEntities({
+        trx,
+        byOperationKey,
+        isOptimistic: true,
+        entities,
+      })
     })
   }
 
@@ -310,7 +338,6 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
   }
 
   public async requeueInflightMutations() {
-    console.log(']]]]]]]]]]]]]]]]]]]] REQUEUE all')
     await this.client
       .updateTable('mutations')
       .set('status', 'pending')
@@ -320,7 +347,6 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
   }
 
   public async requeueInflightMutation(mutationId: string) {
-    console.log(']]]]]]]]]]]]]]]]]]]] REQUEUE', mutationId)
     await this.client
       .updateTable('mutations')
       .set('status', 'pending')
@@ -331,39 +357,138 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
   }
 
   async resolveMutation(args: { mutationId: string; status: ResolvedMutationStatus }) {
-    console.log(']]]]]]]]]]]]]]]]]]]] RESOLVE DB', args)
     const { mutationId, status } = args
 
-    const [mutation] = await Promise.all([
-      this.client
-        .updateTable('mutations')
-        .set('$updatedAt', new Date().toISOString())
-        .set('status', status)
-        .where('id', '=', mutationId)
-        .returningAll()
-        .executeTakeFirst(),
-      this.client
-        .updateTable('entities')
-        // @ts-ignore
-        .set('data', eb => eb.ref('base'))
-        .set('base', null)
-        .set('$updatedAt', new Date().toISOString())
-        .where('base', 'is not', null)
-        .where('__ref', 'in', eb =>
-          eb.selectFrom('mutationPatches').select('entityRef').where('mutationId', '=', mutationId),
-        )
-        .where('__ref', 'not in', eb =>
+    // Change mutation status
+    const mutation = await this.client
+      .updateTable('mutations')
+      .set('$updatedAt', new Date().toISOString())
+      .set('status', status)
+      .where('id', '=', mutationId)
+      .returningAll()
+      .executeTakeFirst()
+
+    // Clean-up mutated entities
+    await this.cleanEntityBases({ onlyMutationId: mutationId })
+
+    return mutation
+  }
+
+  async cleanEntityBases(args?: { onlyMutationId?: string }) {
+    const { onlyMutationId } = args ?? {}
+
+    return await this.client
+      .updateTable('entities')
+      // @ts-ignore
+      .set('data', eb => eb.ref('base'))
+      .set('base', null)
+      .set('$updatedAt', new Date().toISOString())
+      // Has a `base` data
+      .where('base', 'is not', null)
+      // but no active patches
+      .where('__ref', 'not in', eb =>
+        eb
+          .selectFrom('mutationPatches')
+          .select('mutationPatches.entityRef')
+          .innerJoin('mutations', 'mutations.id', 'mutationPatches.mutationId')
+          .where('status', 'in', ACTIVE_MUTATION_STATUSES),
+      )
+      // Optionally look only at entities touched by a specific mutations
+      .$if(!!onlyMutationId, eb =>
+        eb.where('__ref', 'in', eb =>
           eb
             .selectFrom('mutationPatches')
             .select('entityRef')
-            .innerJoin('mutations', 'mutations.id', 'mutationPatches.mutationId')
-            .where('status', 'in', ACTIVE_MUTATION_STATUSES)
-            .where('mutationId', '<>', mutationId),
-        )
-        .execute(),
-    ])
+            .where('mutationId', '=', onlyMutationId!),
+        ),
+      )
+      .execute()
+  }
 
-    return mutation
+  async reapplyAllMutationPatches() {
+    return await this.client
+      // 1. Create the ordered sequence of patches
+      .with('ordered_patches', db =>
+        db
+          .selectFrom('mutationPatches')
+          .select(['entityRef', 'patch'])
+          .select(eb =>
+            sql<number>`${eb.fn.countAll()} OVER (PARTITION BY ${eb.ref('entityRef')})`.as(
+              'total_patches',
+            ),
+          )
+          .select(eb =>
+            sql<number>`row_number() OVER (PARTITION BY ${eb.ref('entityRef')} ORDER BY "mutationPatches".rowid)`.as(
+              'rn',
+            ),
+          )
+          .innerJoin('mutations', 'mutations.id', 'mutationPatches.mutationId')
+          .where('status', 'in', ACTIVE_MUTATION_STATUSES),
+      )
+      // 2. Recursively apply json_patch
+      .withRecursive('patch_chain', db =>
+        db
+          .selectFrom('entities')
+          // ⚠️ ORDER OF SELECTION MUST MATCH ORDER BELOW ⚠️
+          .select(`__ref as entity_ref`)
+          .select(`base as current_data`)
+          .select(sql<number>`0`.as('current_rn'))
+          // Subquery to get max count for the base case
+          .select(eb =>
+            eb
+              .selectFrom('ordered_patches')
+              .select(eb.fn.countAll().as('count'))
+              .whereRef('ordered_patches.entityRef', '=', 'entities.__ref')
+              .as('max_rn'),
+          )
+          // Only include entities that actually have patches
+          .where('base', 'is not', null)
+          .where('entities.__ref', 'in', eb =>
+            eb.selectFrom('ordered_patches').select('ordered_patches.entityRef'),
+          )
+          .unionAll(db =>
+            db
+              .selectFrom('patch_chain')
+              .innerJoin('ordered_patches', join =>
+                join
+                  .onRef('ordered_patches.entityRef', '=', 'patch_chain.entity_ref')
+                  .onRef(
+                    'ordered_patches.rn',
+                    '=',
+                    eb => sql`${eb.ref('patch_chain.current_rn')} + 1`,
+                  ),
+              )
+              // ⚠️ ORDER OF SELECTION MUST MATCH ORDER ABOVE ⚠️
+              .select('patch_chain.entity_ref')
+              .select(eb =>
+                sql<Entity>`json_patch(${eb.ref('patch_chain.current_data')}, ${eb.ref('ordered_patches.patch')})`.as(
+                  'current_data',
+                ),
+              )
+              .select('ordered_patches.rn as current_rn')
+              .select('patch_chain.max_rn'),
+          ),
+      )
+      // 3. Perform the Update
+      .updateTable('entities')
+      .set('data', eb =>
+        eb
+          .selectFrom('patch_chain')
+          .select(eb => sql<string>`${eb.ref('patch_chain.current_data')}`.as('current_data'))
+          .whereRef('patch_chain.entity_ref', '=', 'entities.__ref')
+          .whereRef('patch_chain.current_rn', '=', 'patch_chain.max_rn'),
+      )
+      .where('entities.__ref', 'in', eb =>
+        eb.selectFrom('patch_chain').select('patch_chain.entity_ref'),
+      )
+      .execute()
+  }
+
+  async purgeResolvedMutations() {
+    await this.client
+      .deleteFrom('mutations')
+      .where('status', 'in', RESOLVED_MUTATION_STATUSES)
+      .execute()
   }
 }
 

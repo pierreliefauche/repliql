@@ -67,6 +67,8 @@ export class MutationsProcessor {
     if (!this.startPromise) {
       this.startPromise = (async () => {
         await this.db.requeueInflightMutations()
+        await this.db.cleanEntityBases()
+        await this.db.reapplyAllMutationPatches()
       })()
 
       this.startPromise.then(() => this.runCycle())
