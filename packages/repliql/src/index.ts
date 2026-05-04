@@ -4,3 +4,5 @@ export { repliqlExchange } from './repliqlExchange'
 export type { Resolvers } from './repliqlExchange'
 
 export { fastCacheExchange } from './fastCacheExchange'
+
+export { coldStartExchange } from './coldStartExchange'

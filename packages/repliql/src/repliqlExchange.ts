@@ -25,6 +25,7 @@ import {
   mapTypeNames,
   makeOperationsRegistry,
   ensureOperationId,
+  setCacheOutcome,
 } from '@repliql/utils'
 import {
   type Operation,
@@ -468,6 +469,11 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
                 }
 
                 const opResult = makeResult(operation, result)
+                setCacheOutcome(
+                  opResult,
+                  typeof result.data !== 'undefined' && !result.errors?.length ? 'hit' : 'miss',
+                )
+
                 if (result.isStale) {
                   opResult.stale = true
                 }

@@ -3,6 +3,7 @@ import { Operation } from '@urql/core'
 export interface OperationsRegistry<T> {
   spy: (operation: Operation) => void
   get: (operationKey: number) => undefined | T
+  has: (operationKey: number) => boolean
   entries: () => [number, T][]
   setIfPresent: (operationKey: number, value: T) => void
 }
@@ -95,6 +96,9 @@ export function makeOperationsRegistry<T>(
     spy,
     get(operationKey: number) {
       return registry.get(operationKey)
+    },
+    has(operationKey: number) {
+      return registry.has(operationKey)
     },
     entries() {
       return [...registry.entries()].filter(([key]) => !evictableKeys.has(key))

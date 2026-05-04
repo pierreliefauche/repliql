@@ -5,11 +5,12 @@ import {
   replayCreateCallbackFunction,
 } from '@repliql/kysely-driver-bridge/shared'
 import { ReactiveKysely } from '@repliql/reactive-kysely'
-import { repliqlExchange, type DatabaseSchema } from '@repliql/repliql'
+import { repliqlExchange, type DatabaseSchema, coldStartExchange } from '@repliql/repliql'
 import { SharedExchangeService } from '@repliql/shared-exchange/shared'
 import { SharedServicesManager } from '@repliql/shared-service/shared'
 import { expose } from 'comlink'
 import { SqliteAdapter, SqliteIntrospector, SqliteQueryCompiler } from 'kysely'
+import { composeExchanges } from 'urql'
 
 import { resolvers } from './resolvers'
 
@@ -39,6 +40,8 @@ const repliql = repliqlExchange({
   resolvers,
 })
 
+const coldStart = coldStartExchange()
+
 const sharedServices = new SharedServicesManager({
   services: {
     kyselyDriverBridge: {
@@ -46,7 +49,9 @@ const sharedServices = new SharedServicesManager({
         return remoteBridge
       },
     },
-    sharedExchange: new SharedExchangeService({ exchange: repliql }),
+    sharedExchange: new SharedExchangeService({
+      exchange: composeExchanges([coldStart, repliql]),
+    }),
   },
   logger: {
     ...console,

@@ -45,6 +45,7 @@
     "kysely",
     "repliql",
     "urql",
+    "opfs",
     "oxfmt",
     "oxlint",
     "wouter",

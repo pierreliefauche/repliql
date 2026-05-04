@@ -1,4 +1,8 @@
-import { makeOperationsRegistry, type OperationsRegistryEviction } from '@repliql/utils'
+import {
+  makeOperationsRegistry,
+  setCacheOutcome,
+  type OperationsRegistryEviction,
+} from '@repliql/utils'
 import { makeResult, OperationResult, type Exchange } from '@urql/core'
 import { merge, pipe, tap, map, filter } from 'wonka'
 
@@ -24,7 +28,10 @@ export function fastCacheExchange({ eviction }: FastCacheConfig): Exchange {
           if (operation.kind === 'query' && operation.context.requestPolicy !== 'network-only') {
             const cached = registry.get(operation.key)
             if (cached) {
-              const result = makeResult(operation, { data: cached.data, hasNext: cached.hasNext })
+              const result = setCacheOutcome(
+                makeResult(operation, { data: cached.data, hasNext: cached.hasNext }),
+                'hit',
+              )
               result.stale = cached.stale
               return result
             }

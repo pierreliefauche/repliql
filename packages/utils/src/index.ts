@@ -33,3 +33,4 @@ export type { EvictionConfig as OperationsRegistryEviction } from './urql/operat
 export { ensureOperationId } from './urql/ensureOperationId'
 export { getOperationHandle } from './urql/getOperationHandle'
 export type { OperationHandle } from './urql/getOperationHandle'
+export { getCacheOutcome, setCacheOutcome } from './urql/cacheOutcome'
