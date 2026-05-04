@@ -66,4 +66,6 @@ for (const { dir, manifest } of sorted) {
   if (!tarball) throw new Error(`Could not determine tarball path for ${name}`)
   console.log(`→ publishing ${tarball}`)
   await $`npx -y npm@latest publish ${tarball} --access public --provenance`.cwd(dir)
+  // Signal to changesets/action which packages were published so it can create GitHub Releases.
+  console.log(`🦋  New tag: ${name}@${version}`)
 }
