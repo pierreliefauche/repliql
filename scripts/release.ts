@@ -65,5 +65,5 @@ for (const { dir, manifest } of sorted) {
     .find(l => l.endsWith('.tgz'))
   if (!tarball) throw new Error(`Could not determine tarball path for ${name}`)
   console.log(`→ publishing ${tarball}`)
-  await $`bunx npm publish ${tarball} --access public --provenance`.cwd(dir)
+  await $`npm publish ${tarball} --access public --provenance`.cwd(dir)
 }
