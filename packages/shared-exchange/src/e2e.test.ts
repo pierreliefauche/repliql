@@ -16,23 +16,8 @@ import { delay, filter, makeSubject, map, pipe, subscribe } from 'wonka'
 import type { Source } from 'wonka'
 
 import { proxySharedExchange } from './proxy-exchange'
-import { SharedService as _SharedService, SharedServiceConfig } from './shared-service'
-import type { SpokeCallbacks } from './types'
-
-// Mock heartbeat, never stop beating
-const mockHeartbeat = {
-  start: () => Promise.resolve(),
-  onStop: () => {},
-}
-
-class SharedService extends _SharedService {
-  constructor(config: SharedServiceConfig) {
-    super({
-      heartbeat: mockHeartbeat,
-      ...config,
-    })
-  }
-}
+import { SharedExchangeService as SharedService } from './SharedExchangeService'
+import type { SharedExchange } from './types'
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -53,27 +38,29 @@ async function flush(delay: number = 1): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, delay))
 }
 
+/** Auto-incrementing ID generator for spokes */
+let spokeIdCounter = 0
+function nextSpokeId(): string {
+  return `spoke-${spokeIdCounter++}`
+}
+
 /**
- * Wraps a real SharedService as a Remote<SharedService> without any MessagePort or Comlink
- * serialization — method calls go directly to the service and return Promise.resolve().
- *
- * comlink's proxy(callbacks) just adds a marker symbol to the object, leaving all methods
- * callable directly, so SpokeCallbacks still work end-to-end through this adapter.
+ * Creates a Remote<SharedExchange> wrapper for a single spoke.
+ * The SharedExchange is obtained from `service.onConnectTab(spokeId)`.
  */
-function createDirectHub(service: SharedService): Remote<SharedService> {
+function createDirectSharedExchange(
+  service: SharedService,
+  spokeId?: string,
+): Remote<SharedExchange> {
+  const id = spokeId ?? nextSpokeId()
+  const exchange = service.onConnectTab(id)
   return {
-    connect: (id: string, cb: SpokeCallbacks) => Promise.resolve(service.connect(id, cb)),
-    disconnect: (id: string) => Promise.resolve(service.disconnect(id)),
-    executeOperation: (id: string, op: Parameters<SharedService['executeOperation']>[1]) =>
-      Promise.resolve(service.executeOperation(id, op)),
-    teardownOperation: (id: string, key: number) =>
-      Promise.resolve(service.teardownOperation(id, key)),
-    resolveForwarded: (
-      id: string,
-      key: number,
-      result: Parameters<SharedService['resolveForwarded']>[2],
-    ) => Promise.resolve(service.resolveForwarded(id, key, result)),
-  } as unknown as Remote<SharedService>
+    register: cb => Promise.resolve(exchange.register(cb)),
+    executeOperation: op => Promise.resolve(exchange.executeOperation(op)),
+    teardownOperation: handle => Promise.resolve(exchange.teardownOperation(handle)),
+    resolveForwarded: (handle, result) =>
+      Promise.resolve(exchange.resolveForwarded(handle, result)),
+  } as unknown as Remote<SharedExchange>
 }
 
 /**
@@ -94,13 +81,14 @@ const mockFetch: ExchangeIO = ops$ =>
     ),
   ) as Source<OperationResult>
 
-/** Sets up a spoke exchange wired to the given hub and returns test handles. */
+/** Sets up a spoke exchange wired to the given service and returns test handles. */
 function setupSpoke(
-  hub: Remote<SharedService>,
+  service: SharedService,
   forwardFn: ExchangeIO = mockFetch,
 ): { opsSubject: ReturnType<typeof makeSubject<Operation>>; results: OperationResult[] } {
   const fakeClient = { reexecuteOperation: () => {} } as unknown as Client
-  const exchange = proxySharedExchange({ sharedService: hub, heartbeat: mockHeartbeat })
+  const sharedExchange = createDirectSharedExchange(service)
+  const exchange = proxySharedExchange({ sharedExchange })
   const opsSubject = makeSubject<Operation>()
   const results: OperationResult[] = []
 
@@ -163,8 +151,7 @@ describe('end-to-end: spoke → hub → forward → hub → spoke', () => {
         ops$ =>
           forward(ops$),
     })
-    const hub = createDirectHub(service)
-    const { opsSubject, results } = setupSpoke(hub)
+    const { opsSubject, results } = setupSpoke(service)
 
     const query = makeTestOp('query')
     opsSubject.next(query)
@@ -181,9 +168,8 @@ describe('end-to-end: spoke → hub → forward → hub → spoke', () => {
         ops$ =>
           forward(ops$),
     })
-    const hub = createDirectHub(service)
-    const spokeA = setupSpoke(hub)
-    const spokeB = setupSpoke(hub)
+    const spokeA = setupSpoke(service)
+    const spokeB = setupSpoke(service)
 
     const query = makeTestOp('query')
 
@@ -223,10 +209,9 @@ describe('end-to-end: spoke → hub → forward → hub → spoke', () => {
         ops$ =>
           forward(ops$),
     })
-    const hub = createDirectHub(service)
-    const spokeA = setupSpoke(hub, countingFetch)
-    const spokeB = setupSpoke(hub, countingFetch)
-    const spokeC = setupSpoke(hub, countingFetch)
+    const spokeA = setupSpoke(service, countingFetch)
+    const spokeB = setupSpoke(service, countingFetch)
+    const spokeC = setupSpoke(service, countingFetch)
 
     const sub = makeTestOp('subscription')
     spokeA.opsSubject.next(sub)
@@ -266,9 +251,8 @@ describe('end-to-end: spoke → hub → forward → hub → spoke', () => {
         ops$ =>
           forward(ops$),
     })
-    const hub = createDirectHub(service)
-    const spokeA = setupSpoke(hub, trackingFetch)
-    const spokeB = setupSpoke(hub, trackingFetch)
+    const spokeA = setupSpoke(service, trackingFetch)
+    const spokeB = setupSpoke(service, trackingFetch)
 
     const op = makeTestOp('query')
     spokeA.opsSubject.next(op)
@@ -293,8 +277,7 @@ describe('end-to-end: spoke → hub → forward → hub → spoke', () => {
         ops$ =>
           forward(ops$),
     })
-    const hub = createDirectHub(service)
-    const { opsSubject, results } = setupSpoke(hub)
+    const { opsSubject, results } = setupSpoke(service)
 
     const query = makeTestOp('query')
     opsSubject.next(query)
@@ -325,8 +308,7 @@ describe('e2e with hub forwarding to spoke mock fetch', () => {
     })
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
-    const { opsSubject, results } = setupSpoke(hub, mockFetch)
+    const { opsSubject, results } = setupSpoke(service, mockFetch)
 
     const query = makeTestOp('query')
     opsSubject.next(query)
@@ -349,11 +331,10 @@ describe('e2e with hub forwarding to spoke mock fetch', () => {
     })
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
 
     // Only spokeA handles the forward (it has the mockFetch)
-    const spokeA = setupSpoke(hub, mockFetch)
-    const spokeB = setupSpoke(hub, mockFetch)
+    const spokeA = setupSpoke(service, mockFetch)
+    const spokeB = setupSpoke(service, mockFetch)
 
     const sub = makeTestOp('subscription')
     spokeA.opsSubject.next(sub)
@@ -371,14 +352,13 @@ describe('e2e with hub forwarding to spoke mock fetch', () => {
 
   it('subscription handoff: spokeA disconnects, spokeB takes over fetch', async () => {
     const fetchCalls: { spokeId: string; op: Operation }[] = []
-    let spokeIdCounter = 0
+    let localSpokeIdCounter = 0
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
 
     // Create spokes with mock fetches that identify which spoke made the call
     function setupTrackedSpoke(): ReturnType<typeof setupSpoke> & { spokeId: string } {
-      const spokeId = `spoke-${spokeIdCounter++}`
+      const spokeId = `tracked-spoke-${localSpokeIdCounter++}`
       const trackedMockFetch: ExchangeIO = ops$ =>
         pipe(
           ops$,
@@ -394,7 +374,20 @@ describe('e2e with hub forwarding to spoke mock fetch', () => {
           }),
         ) as Source<OperationResult>
 
-      return { ...setupSpoke(hub, trackedMockFetch), spokeId }
+      const fakeClient = { reexecuteOperation: () => {} } as unknown as Client
+      const sharedExchange = createDirectSharedExchange(service, spokeId)
+      const exchange = proxySharedExchange({ sharedExchange })
+      const opsSubject = makeSubject<Operation>()
+      const results: OperationResult[] = []
+
+      pipe(
+        exchange({ client: fakeClient, forward: trackedMockFetch, dispatchDebug: () => {} })(
+          opsSubject.source,
+        ),
+        subscribe(r => results.push(r)),
+      )
+
+      return { opsSubject, results, spokeId }
     }
 
     const spokeA = setupTrackedSpoke()
@@ -407,7 +400,7 @@ describe('e2e with hub forwarding to spoke mock fetch', () => {
     await flush()
 
     expect(fetchCalls).toHaveLength(1)
-    expect(fetchCalls[0]?.spokeId).toBe('spoke-0') // A fetched
+    expect(fetchCalls[0]?.spokeId).toBe('tracked-spoke-0') // A fetched
 
     // B joins the subscription (deduplicated)
     spokeB.opsSubject.next(sub)
@@ -421,7 +414,7 @@ describe('e2e with hub forwarding to spoke mock fetch', () => {
 
     // B now handles the forward
     expect(fetchCalls).toHaveLength(2)
-    expect(fetchCalls[1]?.spokeId).toBe('spoke-1') // B took over
+    expect(fetchCalls[1]?.spokeId).toBe('tracked-spoke-1') // B took over
 
     // B gets result from its own fetch
     expect(spokeB.results.length).toBeGreaterThanOrEqual(1)
@@ -434,10 +427,9 @@ describe('e2e with hub forwarding to spoke mock fetch', () => {
     })
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
 
-    const spokeA = setupSpoke(hub, mockFetch)
-    const spokeB = setupSpoke(hub, mockFetch)
+    const spokeA = setupSpoke(service, mockFetch)
+    const spokeB = setupSpoke(service, mockFetch)
 
     const query = makeTestOp('query')
 
@@ -477,8 +469,7 @@ describe('e2e with hub forwarding to spoke mock fetch', () => {
       ) as Source<OperationResult>
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
-    const { opsSubject, results } = setupSpoke(hub, mockFetchWithTeardown)
+    const { opsSubject, results } = setupSpoke(service, mockFetchWithTeardown)
 
     const query = makeTestOp('query')
     opsSubject.next(query)
@@ -502,10 +493,9 @@ describe('e2e with hub forwarding to spoke mock fetch', () => {
     })
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
 
-    const spokeA = setupSpoke(hub, mockFetch)
-    const spokeB = setupSpoke(hub, mockFetch)
+    const spokeA = setupSpoke(service, mockFetch)
+    const spokeB = setupSpoke(service, mockFetch)
 
     const sub = makeTestOp('subscription')
 
@@ -579,15 +569,13 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
    * The mockFetchExchange handles operations forwarded from the hub.
    */
   function createUrqlClient(
-    hub: Remote<SharedService>,
+    service: SharedService,
     fetchOptions?: Parameters<typeof createMockFetchExchange>[0],
   ): Client {
+    const sharedExchange = createDirectSharedExchange(service)
     return createClient({
       url: 'http://test.example/graphql',
-      exchanges: [
-        proxySharedExchange({ sharedService: hub, heartbeat: mockHeartbeat }),
-        createMockFetchExchange(fetchOptions),
-      ],
+      exchanges: [proxySharedExchange({ sharedExchange }), createMockFetchExchange(fetchOptions)],
     })
   }
 
@@ -595,9 +583,8 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
     const fetchCalls: Operation[] = []
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
 
-    const client = createUrqlClient(hub, {
+    const client = createUrqlClient(service, {
       onFetch: op => fetchCalls.push(op),
       getData: op => ({ fromMockFetch: true, key: op.key }),
     })
@@ -621,15 +608,14 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
     `
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
 
     // ClientA will handle the forward (first to subscribe)
-    const clientA = createUrqlClient(hub, {
+    const clientA = createUrqlClient(service, {
       delayMs: 10,
       onFetch: op => fetchCalls.push(op),
       getData: () => ({ subscriptionData: true }),
     })
-    const clientB = createUrqlClient(hub, {
+    const clientB = createUrqlClient(service, {
       delayMs: 10,
       onFetch: op => fetchCalls.push(op),
       getData: () => ({ subscriptionData: true }),
@@ -669,7 +655,6 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
     const teardownCalls: Operation[] = []
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
 
     // Track teardowns in the mock fetch exchange
     const trackingFetchExchange: Exchange = () => ops$ =>
@@ -692,12 +677,10 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
         ),
       ) as Source<OperationResult>
 
+    const sharedExchange = createDirectSharedExchange(service)
     const client = createClient({
       url: 'http://test.example/graphql',
-      exchanges: [
-        proxySharedExchange({ sharedService: hub, heartbeat: mockHeartbeat }),
-        trackingFetchExchange,
-      ],
+      exchanges: [proxySharedExchange({ sharedExchange }), trackingFetchExchange],
     })
 
     const results: OperationResult[] = []
@@ -721,10 +704,9 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
     const fetchCallsB: Operation[] = []
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
 
-    const clientA = createUrqlClient(hub, { onFetch: op => fetchCallsA.push(op) })
-    const clientB = createUrqlClient(hub, { onFetch: op => fetchCallsB.push(op) })
+    const clientA = createUrqlClient(service, { onFetch: op => fetchCallsA.push(op) })
+    const clientB = createUrqlClient(service, { onFetch: op => fetchCallsB.push(op) })
 
     // Both clients query (queries are NOT deduplicated)
     const [resultA, resultB] = await Promise.all([
@@ -741,9 +723,8 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
 
   it('urql client receives delayed results', async () => {
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
 
-    const client = createUrqlClient(hub, {
+    const client = createUrqlClient(service, {
       delayMs: 30,
       getData: () => ({ delayed: true }),
     })
@@ -767,15 +748,14 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
     const fetchCallsB: Operation[] = []
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
 
     // Use delay so B can subscribe before A's result arrives
-    const clientA = createUrqlClient(hub, {
+    const clientA = createUrqlClient(service, {
       delayMs: 15,
       onFetch: op => fetchCallsA.push(op),
       getData: () => ({ from: 'A' }),
     })
-    const clientB = createUrqlClient(hub, {
+    const clientB = createUrqlClient(service, {
       delayMs: 15,
       onFetch: op => fetchCallsB.push(op),
       getData: () => ({ from: 'B' }),
@@ -856,14 +836,11 @@ describe('e2e with real URQL clients and mock fetch exchange', () => {
       )
 
     const service = new SharedService({ exchange: forwardAllExchange })
-    const hub = createDirectHub(service)
+    const sharedExchange = createDirectSharedExchange(service)
 
     const client = createClient({
       url: 'http://test.example/graphql',
-      exchanges: [
-        proxySharedExchange({ sharedService: hub, heartbeat: mockHeartbeat }),
-        streamingFetchExchange,
-      ],
+      exchanges: [proxySharedExchange({ sharedExchange }), streamingFetchExchange],
     })
 
     const results: OperationResult[] = []

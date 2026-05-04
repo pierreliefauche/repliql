@@ -16,6 +16,10 @@ import { BridgedConnection } from './BridgedConnection'
 import { BridgedDriver } from './BridgedDriver'
 import { DriverBridge } from './DriverBridge'
 import { adaptSqlite } from './test-utils/adaptSqlite'
+import type { CreateCallbackFunctionFn } from './types'
+
+// Noop callback function for tests that don't need it
+const noopCreateCallback: CreateCallbackFunctionFn = () => {}
 
 class FakeConnection implements DatabaseConnection {
   public executed: CompiledQuery[] = []
@@ -68,7 +72,10 @@ class FakeDriver implements Driver {
 describe('DriverBridge — unit', () => {
   it('memoizes init across parallel callers', async () => {
     const driver = new FakeDriver()
-    const bridge = new DriverBridge(() => driver)
+    const bridge = new DriverBridge({
+      createDriver: () => driver,
+      createCallbackFunction: noopCreateCallback,
+    })
 
     await Promise.all([bridge.init(), bridge.init(), bridge.init()])
 
@@ -78,7 +85,10 @@ describe('DriverBridge — unit', () => {
   it('clears the init memo on rejection so a retry can succeed', async () => {
     const driver = new FakeDriver()
     driver.initShouldFail = true
-    const bridge = new DriverBridge(() => driver)
+    const bridge = new DriverBridge({
+      createDriver: () => driver,
+      createCallbackFunction: noopCreateCallback,
+    })
 
     await expect(bridge.init()).rejects.toThrow('init failed')
     await bridge.init()
@@ -88,7 +98,10 @@ describe('DriverBridge — unit', () => {
 
   it('acquireConnection returns distinct ids and tracks connections', async () => {
     const driver = new FakeDriver()
-    const bridge = new DriverBridge(() => driver)
+    const bridge = new DriverBridge({
+      createDriver: () => driver,
+      createCallbackFunction: noopCreateCallback,
+    })
 
     const a = await bridge.acquireConnection()
     const b = await bridge.acquireConnection()
@@ -100,12 +113,16 @@ describe('DriverBridge — unit', () => {
 
   it('executeQuery on unknown id throws UnknownConnectionError (by name)', async () => {
     const driver = new FakeDriver()
-    const bridge = new DriverBridge(() => driver)
+    const bridge = new DriverBridge({
+      createDriver: () => driver,
+      createCallbackFunction: noopCreateCallback,
+    })
     await bridge.init()
 
     let caught: unknown
     try {
       await bridge.executeQuery('does-not-exist', {
+        queryId: { queryId: '' },
         sql: 'select 1',
         parameters: [],
         query: {} as never,
@@ -118,7 +135,10 @@ describe('DriverBridge — unit', () => {
 
   it('routes transaction methods to the right connection', async () => {
     const driver = new FakeDriver()
-    const bridge = new DriverBridge(() => driver)
+    const bridge = new DriverBridge({
+      createDriver: () => driver,
+      createCallbackFunction: noopCreateCallback,
+    })
     const id = await bridge.acquireConnection()
 
     await bridge.beginTransaction(id, { isolationLevel: 'serializable' })
@@ -132,7 +152,10 @@ describe('DriverBridge — unit', () => {
 
   it('releaseConnection drops the id; subsequent operations throw UnknownConnectionError', async () => {
     const driver = new FakeDriver()
-    const bridge = new DriverBridge(() => driver)
+    const bridge = new DriverBridge({
+      createDriver: () => driver,
+      createCallbackFunction: noopCreateCallback,
+    })
     const id = await bridge.acquireConnection()
 
     await bridge.releaseConnection(id)
@@ -149,7 +172,10 @@ describe('DriverBridge — unit', () => {
 
   it('destroy tears down the underlying driver', async () => {
     const driver = new FakeDriver()
-    const bridge = new DriverBridge(() => driver)
+    const bridge = new DriverBridge({
+      createDriver: () => driver,
+      createCallbackFunction: noopCreateCallback,
+    })
     await bridge.init()
 
     await bridge.destroy()
@@ -166,7 +192,10 @@ describe('DriverBridge — integration with real SQLite', () => {
   beforeEach(async () => {
     sqlite = new Database(':memory:')
     const adapted = adaptSqlite(sqlite)
-    bridge = new DriverBridge(() => new SqliteDialect({ database: adapted }).createDriver())
+    bridge = new DriverBridge({
+      createDriver: () => new SqliteDialect({ database: adapted }).createDriver(),
+      createCallbackFunction: noopCreateCallback,
+    })
 
     // Build a Kysely instance whose dialect uses BridgedDriver pointed at the in-process bridge.
     // We borrow the dialect's adapter / introspector / compiler from a throwaway SqliteDialect.

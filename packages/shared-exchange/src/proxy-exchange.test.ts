@@ -14,16 +14,9 @@ import { makeSubject, pipe, subscribe } from 'wonka'
 import type { Source } from 'wonka'
 
 import { proxySharedExchange } from './proxy-exchange'
-import type { SharedService } from './shared-service'
-import type { SerializedOperation, SerializedResult, SpokeCallbacks } from './types'
+import type { SerializedOperation, SerializedResult, SharedExchange, SpokeCallbacks } from './types'
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
-
-// Mock heartbeat, never stop beating
-const mockHeartbeat = {
-  start: () => Promise.resolve(),
-  onStop: () => {},
-}
 
 const testDoc = gql`
   query TestQuery {
@@ -46,7 +39,7 @@ interface MockHub {
   executedOps: SerializedOperation[]
   teardowns: number[]
   forwardedResults: Array<{ key: number; result: SerializedResult }>
-  hub: Remote<SharedService>
+  hub: Remote<SharedExchange>
 }
 
 function makeMockHub(): MockHub {
@@ -55,30 +48,27 @@ function makeMockHub(): MockHub {
     executedOps: [],
     teardowns: [],
     forwardedResults: [],
-    hub: null as unknown as Remote<SharedService>,
+    hub: null as unknown as Remote<SharedExchange>,
   }
 
   mock.hub = {
-    connect(_spokeId: string, callbacks: SpokeCallbacks): Promise<void> {
+    register(callbacks: SpokeCallbacks): Promise<void> {
       mock.storedCallbacks = callbacks
       return Promise.resolve()
     },
-    executeOperation(_spokeId: string, op: SerializedOperation): Promise<void> {
+    executeOperation(op: SerializedOperation): Promise<void> {
       mock.executedOps.push(op)
       return Promise.resolve()
     },
-    teardownOperation(_spokeId: string, key: number): Promise<void> {
-      mock.teardowns.push(key)
+    teardownOperation(handle: number): Promise<void> {
+      mock.teardowns.push(handle)
       return Promise.resolve()
     },
-    resolveForwarded(_spokeId: string, key: number, result: SerializedResult): Promise<void> {
-      mock.forwardedResults.push({ key, result })
+    resolveForwarded(handle: number, result: SerializedResult): Promise<void> {
+      mock.forwardedResults.push({ key: handle, result })
       return Promise.resolve()
     },
-    disconnect(_spokeId: string): Promise<void> {
-      return Promise.resolve()
-    },
-  } as unknown as Remote<SharedService>
+  } as unknown as Remote<SharedExchange>
 
   return mock
 }
@@ -92,8 +82,7 @@ function setupExchange(
   results: OperationResult[]
 } {
   const exchange: Exchange = proxySharedExchange({
-    sharedService: mockHub.hub,
-    heartbeat: mockHeartbeat,
+    sharedExchange: mockHub.hub,
   })
 
   const fakeClient = {
@@ -158,6 +147,7 @@ describe('proxySharedExchange', () => {
 
     // Hub sends a result via onResult callback
     mock.storedCallbacks?.onResult({
+      handle: query.key,
       key: query.key,
       data: { value: 42 },
       stale: false,
@@ -274,8 +264,7 @@ describe('proxySharedExchange', () => {
     } as unknown as Client
 
     const exchange: Exchange = proxySharedExchange({
-      sharedService: mock.hub,
-      heartbeat: mockHeartbeat,
+      sharedExchange: mock.hub,
     })
     const opsSubject = makeSubject<Operation>()
     // Must subscribe to the result source to activate the Wonka pipeline

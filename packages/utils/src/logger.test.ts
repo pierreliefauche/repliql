@@ -88,12 +88,18 @@ describe('makeLogger', () => {
   })
 
   describe('default level', () => {
-    it('defaults to debug level when level is not specified', () => {
+    it('defaults to warn level when level is not specified', () => {
       const mocks = createMockConfig()
       const logger = makeLogger({ ...mocks, prefix: 'test' })
 
       logger.debug('test')
-      expect(mocks.debug).toHaveBeenCalled()
+      logger.info('test')
+      logger.warn('test')
+      logger.error('test')
+      expect(mocks.debug).not.toHaveBeenCalled()
+      expect(mocks.info).not.toHaveBeenCalled()
+      expect(mocks.warn).toHaveBeenCalled()
+      expect(mocks.error).toHaveBeenCalled()
     })
   })
 

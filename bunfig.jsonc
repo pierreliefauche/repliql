@@ -11,6 +11,8 @@
     // Root directory for test discovery
     "root": ".",
     "pathIgnorePatterns": ["vendors/**"],
+    "coverage": true,
+    "coveragePathIgnorePatterns": ["**/dist/**", "*.ts"],
   },
 
   // Build configuration defaults

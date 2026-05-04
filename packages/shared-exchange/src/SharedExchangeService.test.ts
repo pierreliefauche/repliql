@@ -11,26 +11,9 @@ import {
 } from '@urql/core'
 import { makeSubject, pipe, subscribe } from 'wonka'
 
-import { SharedService as _SharedService, SharedServiceConfig } from './shared-service'
-import type { SerializedOperation, SerializedResult, SpokeCallbacks } from './types'
+import { SharedExchangeService as SharedService } from './SharedExchangeService'
+import type { SerializedOperation, SerializedResult, SharedExchange, SpokeCallbacks } from './types'
 import { serializeOp } from './utils'
-
-// ─── Fixtures ────────────────────────────────────────────────────────────────
-
-// Mock heartbeat, never stop beating
-const mockHeartbeat = {
-  start: () => Promise.resolve(),
-  onStop: () => {},
-}
-
-class SharedService extends _SharedService {
-  constructor(config: SharedServiceConfig) {
-    super({
-      heartbeat: mockHeartbeat,
-      ...config,
-    })
-  }
-}
 
 const testDoc = gql`
   query TestQuery {
@@ -62,6 +45,27 @@ function makeMockCallbacks(): {
     results,
     forwards,
     reexecutes,
+  }
+}
+
+/** Connects a spoke to the service and registers callbacks in one call. */
+function connectSpoke(
+  service: SharedService,
+  spokeId: string,
+): {
+  exchange: SharedExchange
+  results: SerializedResult[]
+  forwards: SerializedOperation[]
+  reexecutes: SerializedOperation[]
+} {
+  const mock = makeMockCallbacks()
+  const exchange = service.onConnectTab(spokeId)
+  exchange.register(mock.callbacks)
+  return {
+    exchange,
+    results: mock.results,
+    forwards: mock.forwards,
+    reexecutes: mock.reexecutes,
   }
 }
 
@@ -99,23 +103,21 @@ describe('SharedService', () => {
       const { exchange, ops } = makeRecordingExchange()
       const service = new SharedService({ exchange })
 
-      const spokeA = makeMockCallbacks()
-      const spokeB = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
-      service.connect('B', spokeB.callbacks)
+      const spokeA = connectSpoke(service, 'A')
+      const spokeB = connectSpoke(service, 'B')
 
       const sub = makeTestOp('subscription')
-      service.executeOperation('A', serializeOp(sub))
-      service.executeOperation('B', serializeOp(sub)) // same key — deduped
+      spokeA.exchange.executeOperation(serializeOp(sub))
+      spokeB.exchange.executeOperation(serializeOp(sub)) // same key — deduped
 
       const initialOps = ops.filter(o => o.kind !== 'teardown').length
       expect(initialOps).toBe(1) // one subscription op
 
-      service.teardownOperation('A', sub.key)
+      spokeA.exchange.teardownOperation(sub.key)
       const teardownsAfterA = ops.filter(o => o.kind === 'teardown').length
       expect(teardownsAfterA).toBe(0) // B still active
 
-      service.teardownOperation('B', sub.key)
+      spokeB.exchange.teardownOperation(sub.key)
       const teardownsAfterB = ops.filter(o => o.kind === 'teardown').length
       expect(teardownsAfterB).toBe(1) // now the exchange sees the teardown
     })
@@ -124,12 +126,11 @@ describe('SharedService', () => {
       const { exchange, ops } = makeRecordingExchange()
       const service = new SharedService({ exchange })
 
-      const spokeA = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
+      const spokeA = connectSpoke(service, 'A')
 
       const query = makeTestOp('query')
-      service.executeOperation('A', serializeOp(query))
-      service.teardownOperation('A', query.key)
+      spokeA.exchange.executeOperation(serializeOp(query))
+      spokeA.exchange.teardownOperation(query.key)
 
       const teardowns = ops.filter(o => o.kind === 'teardown')
       expect(teardowns).toHaveLength(1)
@@ -141,14 +142,12 @@ describe('SharedService', () => {
       const { exchange, ops } = makeRecordingExchange()
       const service = new SharedService({ exchange })
 
-      const spokeA = makeMockCallbacks()
-      const spokeB = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
-      service.connect('B', spokeB.callbacks)
+      const spokeA = connectSpoke(service, 'A')
+      const spokeB = connectSpoke(service, 'B')
 
       const sub = makeTestOp('subscription')
-      service.executeOperation('A', serializeOp(sub))
-      service.executeOperation('B', serializeOp(sub)) // same key
+      spokeA.exchange.executeOperation(serializeOp(sub))
+      spokeB.exchange.executeOperation(serializeOp(sub)) // same key
 
       const subOps = ops.filter(o => o.kind === 'subscription')
       expect(subOps).toHaveLength(1)
@@ -158,14 +157,12 @@ describe('SharedService', () => {
       const { exchange, ops } = makeRecordingExchange()
       const service = new SharedService({ exchange })
 
-      const spokeA = makeMockCallbacks()
-      const spokeB = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
-      service.connect('B', spokeB.callbacks)
+      const spokeA = connectSpoke(service, 'A')
+      const spokeB = connectSpoke(service, 'B')
 
       const query = makeTestOp('query')
-      service.executeOperation('A', serializeOp(query))
-      service.executeOperation('B', serializeOp(query)) // same key, not deduped
+      spokeA.exchange.executeOperation(serializeOp(query))
+      spokeB.exchange.executeOperation(serializeOp(query)) // same key, not deduped
 
       const queryOps = ops.filter(o => o.kind === 'query')
       expect(queryOps).toHaveLength(2)
@@ -177,14 +174,12 @@ describe('SharedService', () => {
       const { exchange, pushResult } = makeRecordingExchange()
       const service = new SharedService({ exchange })
 
-      const spokeA = makeMockCallbacks()
-      const spokeB = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
-      service.connect('B', spokeB.callbacks)
+      const spokeA = connectSpoke(service, 'A')
+      const spokeB = connectSpoke(service, 'B')
 
       const query = makeTestOp('query')
-      service.executeOperation('A', serializeOp(query))
-      service.executeOperation('B', serializeOp(query))
+      spokeA.exchange.executeOperation(serializeOp(query))
+      spokeB.exchange.executeOperation(serializeOp(query))
 
       pushResult(makeResult(query, { data: { value: 1 } }))
 
@@ -198,17 +193,15 @@ describe('SharedService', () => {
       const { exchange, pushResult } = makeRecordingExchange()
       const service = new SharedService({ exchange })
 
-      const spokeA = makeMockCallbacks()
-      const spokeB = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
-      service.connect('B', spokeB.callbacks)
+      const spokeA = connectSpoke(service, 'A')
+      const spokeB = connectSpoke(service, 'B')
 
       const query = makeTestOp('query')
-      service.executeOperation('A', serializeOp(query))
-      service.executeOperation('B', serializeOp(query))
+      spokeA.exchange.executeOperation(serializeOp(query))
+      spokeB.exchange.executeOperation(serializeOp(query))
 
       // A tears down — still waiting for B
-      service.teardownOperation('A', query.key)
+      spokeA.exchange.teardownOperation(query.key)
 
       pushResult(makeResult(query, { data: { value: 2 } }))
 
@@ -221,11 +214,10 @@ describe('SharedService', () => {
     it('calls onForward on the owner spoke when the exchange calls forward', () => {
       const service = new SharedService({ exchange: forwardAllExchange })
 
-      const spokeA = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
+      const spokeA = connectSpoke(service, 'A')
 
       const query = makeTestOp('query')
-      service.executeOperation('A', serializeOp(query))
+      spokeA.exchange.executeOperation(serializeOp(query))
 
       expect(spokeA.forwards).toHaveLength(1)
       expect(spokeA.forwards[0]?.key).toBe(query.key)
@@ -234,20 +226,20 @@ describe('SharedService', () => {
     it('resolveForwarded pushes the result back through the exchange and to the spoke', () => {
       const service = new SharedService({ exchange: forwardAllExchange })
 
-      const spokeA = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
+      const spokeA = connectSpoke(service, 'A')
 
       const query = makeTestOp('query')
-      service.executeOperation('A', serializeOp(query))
+      spokeA.exchange.executeOperation(serializeOp(query))
       expect(spokeA.forwards).toHaveLength(1)
 
       const fakeResult: SerializedResult = {
+        handle: query.key,
         key: query.key,
         data: { value: 99 },
         stale: false,
         hasNext: false,
       }
-      service.resolveForwarded('A', query.key, fakeResult)
+      spokeA.exchange.resolveForwarded(query.key, fakeResult)
 
       expect(spokeA.results).toHaveLength(1)
       expect(spokeA.results[0]?.data).toEqual({ value: 99 })
@@ -256,29 +248,27 @@ describe('SharedService', () => {
     it('forwards teardown to the spoke that triggered it (last unsubscriber), not the original forwarding spoke', () => {
       const service = new SharedService({ exchange: forwardAllExchange })
 
-      const spokeA = makeMockCallbacks()
-      const spokeB = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
-      service.connect('B', spokeB.callbacks)
+      const spokeA = connectSpoke(service, 'A')
+      const spokeB = connectSpoke(service, 'B')
 
       const sub = makeTestOp('subscription')
       // A subscribes first (becomes the forward handler)
-      service.executeOperation('A', serializeOp(sub))
+      spokeA.exchange.executeOperation(serializeOp(sub))
       // B subscribes to same key
-      service.executeOperation('B', serializeOp(sub))
+      spokeB.exchange.executeOperation(serializeOp(sub))
 
       // Only A should receive the initial forward (it's the owner)
       expect(spokeA.forwards.filter(f => f.kind === 'subscription')).toHaveLength(1)
       expect(spokeB.forwards.filter(f => f.kind === 'subscription')).toHaveLength(0)
 
       // A tears down first (B still active) — subscription hands off to B
-      service.teardownOperation('A', sub.key)
+      spokeA.exchange.teardownOperation(sub.key)
       // A gets teardown to stop its forward, B gets subscription to take over
       expect(spokeA.forwards.filter(f => f.kind === 'teardown')).toHaveLength(1)
       expect(spokeB.forwards.filter(f => f.kind === 'subscription')).toHaveLength(1)
 
       // B tears down last, triggering the full teardown
-      service.teardownOperation('B', sub.key)
+      spokeB.exchange.teardownOperation(sub.key)
 
       // B should receive one more teardown (the final one)
       expect(spokeA.forwards.filter(f => f.kind === 'teardown')).toHaveLength(1) // still just the handoff teardown
@@ -289,18 +279,15 @@ describe('SharedService', () => {
     it('hands off subscription to another spoke when the forwarding spoke disconnects', () => {
       const service = new SharedService({ exchange: forwardAllExchange })
 
-      const spokeA = makeMockCallbacks()
-      const spokeB = makeMockCallbacks()
-      const spokeC = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
-      service.connect('B', spokeB.callbacks)
-      service.connect('C', spokeC.callbacks)
+      const spokeA = connectSpoke(service, 'A')
+      const spokeB = connectSpoke(service, 'B')
+      const spokeC = connectSpoke(service, 'C')
 
       const sub = makeTestOp('subscription')
       // All three subscribe to the same subscription
-      service.executeOperation('A', serializeOp(sub))
-      service.executeOperation('B', serializeOp(sub))
-      service.executeOperation('C', serializeOp(sub))
+      spokeA.exchange.executeOperation(serializeOp(sub))
+      spokeB.exchange.executeOperation(serializeOp(sub))
+      spokeC.exchange.executeOperation(serializeOp(sub))
 
       // Only A (first subscriber) receives the forward
       expect(spokeA.forwards.filter(f => f.kind === 'subscription')).toHaveLength(1)
@@ -308,35 +295,34 @@ describe('SharedService', () => {
       expect(spokeC.forwards.filter(f => f.kind === 'subscription')).toHaveLength(0)
 
       // A disconnects — subscription should hand off to B (next in line)
-      service.disconnect('A')
+      service.onDisconnectTab('A')
       expect(spokeA.forwards.filter(f => f.kind === 'teardown')).toHaveLength(1) // A's forward is torn down
       expect(spokeB.forwards.filter(f => f.kind === 'subscription')).toHaveLength(1) // B takes over
       expect(spokeC.forwards.filter(f => f.kind === 'subscription')).toHaveLength(0) // C still just listening
 
       // B disconnects — subscription should hand off to C
-      service.disconnect('B')
+      service.onDisconnectTab('B')
       expect(spokeB.forwards.filter(f => f.kind === 'teardown')).toHaveLength(1) // B's forward is torn down
       expect(spokeC.forwards.filter(f => f.kind === 'subscription')).toHaveLength(1) // C takes over
 
       // C disconnects — final teardown
-      service.disconnect('C')
+      service.onDisconnectTab('C')
       expect(spokeC.forwards.filter(f => f.kind === 'teardown')).toHaveLength(1) // C gets final teardown
     })
 
     it('forwards teardown to the only spoke when it tears down', () => {
       const service = new SharedService({ exchange: forwardAllExchange })
 
-      const spokeA = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
+      const spokeA = connectSpoke(service, 'A')
 
       const query = makeTestOp('query')
-      service.executeOperation('A', serializeOp(query))
+      spokeA.exchange.executeOperation(serializeOp(query))
 
       // A receives the forward
       expect(spokeA.forwards.filter(f => f.kind === 'query')).toHaveLength(1)
 
       // A tears down
-      service.teardownOperation('A', query.key)
+      spokeA.exchange.teardownOperation(query.key)
 
       // A should receive the teardown forward since it's the only/triggering spoke
       expect(spokeA.forwards.filter(f => f.kind === 'teardown')).toHaveLength(1)
@@ -349,21 +335,19 @@ describe('SharedService', () => {
       const { exchange, ops } = makeRecordingExchange()
       const service = new SharedService({ exchange })
 
-      const spokeA = makeMockCallbacks()
-      const spokeB = makeMockCallbacks()
-      service.connect('A', spokeA.callbacks)
-      service.connect('B', spokeB.callbacks)
+      const spokeA = connectSpoke(service, 'A')
+      const spokeB = connectSpoke(service, 'B')
 
       const sub = makeTestOp('subscription')
-      service.executeOperation('A', serializeOp(sub))
-      service.executeOperation('B', serializeOp(sub))
+      spokeA.exchange.executeOperation(serializeOp(sub))
+      spokeB.exchange.executeOperation(serializeOp(sub))
 
       // A disconnects — B still active so no teardown yet
-      service.disconnect('A')
+      service.onDisconnectTab('A')
       expect(ops.filter(o => o.kind === 'teardown')).toHaveLength(0)
 
       // B disconnects — now teardown fires
-      service.disconnect('B')
+      service.onDisconnectTab('B')
       expect(ops.filter(o => o.kind === 'teardown')).toHaveLength(1)
     })
   })

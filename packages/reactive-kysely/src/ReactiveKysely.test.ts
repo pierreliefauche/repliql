@@ -127,8 +127,8 @@ beforeEach(async () => {
     dialect: new SqliteDialect({ database: adapted }),
     createCallbackFunction: (name, cb) => {
       callbacksRegistered++
-      adapted.function(name, (oldJson: any, newJson: any) => {
-        cb(oldJson, newJson)
+      adapted.function(name, (rowId: any, oldJson: any, newJson: any) => {
+        cb(rowId, oldJson, newJson)
         return null
       })
     },
@@ -1613,8 +1613,8 @@ describe('ReactiveKysely — queryUpdateDebounceMs', () => {
     const debouncedDb = new InstrumentedReactiveKysely<DB>({
       dialect: new SqliteDialect({ database: debouncedAdapted }),
       createCallbackFunction: (name, cb) => {
-        debouncedAdapted.function(name, (oldJson: any, newJson: any) => {
-          cb(oldJson, newJson)
+        debouncedAdapted.function(name, (rowId: any, oldJson: any, newJson: any) => {
+          cb(rowId, oldJson, newJson)
           return null
         })
       },
@@ -1897,8 +1897,8 @@ describe('ReactiveKysely — custom ignoreColumnUpdate', () => {
     customDb = new InstrumentedReactiveKysely<DB>({
       dialect: new SqliteDialect({ database: customAdapted }),
       createCallbackFunction: (name, cb) => {
-        customAdapted.function(name, (oldJson: any, newJson: any) => {
-          cb(oldJson, newJson)
+        customAdapted.function(name, (rowId: any, oldJson: any, newJson: any) => {
+          cb(rowId, oldJson, newJson)
           return null
         })
       },

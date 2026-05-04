@@ -5,6 +5,8 @@ const LOG_LEVELS = {
   error: 4,
 }
 
+const DEFAULT_LEVEL: LogLevel = 'warn'
+
 export type LogLevel = keyof typeof LOG_LEVELS
 
 export type LoggerConfig = {
@@ -19,7 +21,7 @@ export type Logger = {
 
 export function makeLogger(config: LoggerConfig & { prefix: string }): Logger {
   const { level, prefix, ...loggingFn } = config
-  const getLevel = typeof level === 'function' ? level : () => level || 'info'
+  const getLevel = typeof level === 'function' ? level : () => level || DEFAULT_LEVEL
 
   return {
     debug(message, ...args) {

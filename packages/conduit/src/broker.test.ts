@@ -1,39 +1,55 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect, beforeEach } from 'bun:test'
 
+import { heartbeat, type Logger, type Heartbeat } from '@repliql/utils'
 import type { Remote } from 'comlink'
 
 import { Broker } from './Broker'
 import { ConduitEventEmitter } from './events'
-import type { Heartbeat } from './heartbeat'
+import { getHeartbeatId } from './getHeartbeatId'
 import { LeaderResignedError } from './protocol'
 
 interface FakeHeartbeat extends Heartbeat {
   stop(id: string): void
+  _reset(): void
 }
 
-function makeFakeHeartbeat(): FakeHeartbeat {
-  const stoppers = new Map<string, Array<() => void>>()
-  return {
-    start: () => Promise.resolve(),
-    onStop: (id, callback) => {
-      let arr = stoppers.get(id)
-      if (!arr) {
-        arr = []
-        stoppers.set(id, arr)
-      }
-      arr.push(callback)
-    },
-    stop(id) {
-      const arr = stoppers.get(id)
-      if (!arr) {
-        return
-      }
-      stoppers.delete(id)
-      for (const cb of arr) {
-        cb()
-      }
-    },
+// Override the heartbeat object's methods to be controllable in tests
+const stoppers = new Map<string, Array<() => void>>()
+
+heartbeat.onStop = (id, callback) => {
+  let arr = stoppers.get(id)
+  if (!arr) {
+    arr = []
+    stoppers.set(id, arr)
   }
+  arr.push(callback)
+}
+
+const fakeHeartbeat: FakeHeartbeat = {
+  start: heartbeat.start,
+  onStop: heartbeat.onStop,
+  stop(tabId) {
+    // Use the same ID format as the Broker
+    const id = getHeartbeatId(tabId)
+    const arr = stoppers.get(id)
+    if (!arr) {
+      return
+    }
+    stoppers.delete(id)
+    for (const cb of arr) {
+      cb()
+    }
+  },
+  _reset() {
+    stoppers.clear()
+  },
+}
+
+const noopLogger: Logger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
 }
 
 interface FakeRemote {
@@ -56,10 +72,13 @@ function makeRemote(label: string, opts: { multiplier?: number } = {}): Remote<F
 }
 
 describe('Broker', () => {
+  beforeEach(() => {
+    fakeHeartbeat._reset()
+  })
+
   it('promotes the first registered tab and fires leaderElected', () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     const elected: string[] = []
     events.on('leaderElected', ({ leaderId }) => elected.push(leaderId))
 
@@ -68,9 +87,8 @@ describe('Broker', () => {
   })
 
   it('does not re-elect when a second tab registers', () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     const elected: string[] = []
     events.on('leaderElected', ({ leaderId }) => elected.push(leaderId))
 
@@ -80,9 +98,8 @@ describe('Broker', () => {
   })
 
   it('routes calls to the current leader', async () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
 
@@ -91,9 +108,8 @@ describe('Broker', () => {
   })
 
   it('queues calls until a leader exists, then flushes', async () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     const pending = broker.callOnLeader(remote => (remote as unknown as FakeRemote).ping())
 
     broker.register('tab-A', makeRemote('A'))
@@ -101,51 +117,47 @@ describe('Broker', () => {
   })
 
   it('fires leaderResigned then leaderElected on leader death', () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     const log: string[] = []
     events.on('leaderElected', ({ leaderId }) => log.push(`elect:${leaderId}`))
     events.on('leaderResigned', ({ leaderId }) => log.push(`resign:${leaderId}`))
 
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
-    hb.stop('tab-A')
+    fakeHeartbeat.stop('tab-A')
     expect(log).toEqual(['elect:tab-A', 'resign:tab-A', 'elect:tab-B'])
   })
 
   it('promotes the oldest surviving tab (FIFO)', () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     const elected: string[] = []
     events.on('leaderElected', ({ leaderId }) => elected.push(leaderId))
 
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
     broker.register('tab-C', makeRemote('C'))
-    hb.stop('tab-A')
+    fakeHeartbeat.stop('tab-A')
     expect(elected).toEqual(['tab-A', 'tab-B'])
   })
 
   it('routes to the new leader after failover', async () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
-    hb.stop('tab-A')
+    fakeHeartbeat.stop('tab-A')
 
     const result = await broker.callOnLeader(remote => (remote as unknown as FakeRemote).ping())
     expect(result).toBe('B')
   })
 
   it('queues calls when the only tab dies and resolves on next registration', async () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     broker.register('tab-A', makeRemote('A'))
-    hb.stop('tab-A')
+    fakeHeartbeat.stop('tab-A')
 
     const pending = broker.callOnLeader(remote => (remote as unknown as FakeRemote).ping())
     broker.register('tab-B', makeRemote('B'))
@@ -153,34 +165,31 @@ describe('Broker', () => {
   })
 
   it('rejects in-flight calls with LeaderResignedError when leader resigns', async () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
 
     const pending = broker.callOnLeader(remote => (remote as unknown as FakeRemote).slow(50, 1))
-    hb.stop('tab-A')
+    fakeHeartbeat.stop('tab-A')
 
     await expect(pending).rejects.toBeInstanceOf(LeaderResignedError)
   })
 
   it('does not reject in-flight calls when a non-leader tab dies', async () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     broker.register('tab-A', makeRemote('A'))
     broker.register('tab-B', makeRemote('B'))
 
     const pending = broker.callOnLeader(remote => (remote as unknown as FakeRemote).slow(20, 7))
-    hb.stop('tab-B')
+    fakeHeartbeat.stop('tab-B')
     expect(await pending).toBe(7)
   })
 
   it('getLeaderId returns the current leader', () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     expect(broker.getLeaderId()).toBeNull()
 
     broker.register('tab-A', makeRemote('A'))
@@ -188,9 +197,8 @@ describe('Broker', () => {
   })
 
   it('unregisterTab is equivalent to a heartbeat stop', () => {
-    const hb = makeFakeHeartbeat()
     const events = new ConduitEventEmitter()
-    const broker = new Broker(events, hb)
+    const broker = new Broker({ events, logger: noopLogger })
     const log: string[] = []
     events.on('leaderElected', ({ leaderId }) => log.push(`elect:${leaderId}`))
     events.on('leaderResigned', ({ leaderId }) => log.push(`resign:${leaderId}`))
