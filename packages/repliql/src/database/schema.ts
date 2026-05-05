@@ -7,8 +7,9 @@ type ReadOnly<T> =
 
 type Timestamp = ColumnType<Date, Date | string, Date | string>
 
-export const RESOLVED_MUTATION_STATUSES = ['applied', 'failed', 'canceled'] as const
+export const ENTITIES_TABLE_NAME: keyof DatabaseSchema = 'entities' as const
 
+export const RESOLVED_MUTATION_STATUSES = ['applied', 'failed', 'canceled'] as const
 export const ACTIVE_MUTATION_STATUSES = ['draft', 'pending', 'inflight'] as const
 
 export type ResolvedMutationStatus = (typeof RESOLVED_MUTATION_STATUSES)[number]

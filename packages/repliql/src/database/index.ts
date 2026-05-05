@@ -5,14 +5,20 @@ import { type MigrationResultSet, Migrator, Selectable, sql, Transaction } from 
 
 import {
   ACTIVE_MUTATION_STATUSES,
+  ENTITIES_TABLE_NAME,
   RESOLVED_MUTATION_STATUSES,
   type DatabaseSchema,
   type MutationStatus,
   type ResolvedMutationStatus,
 } from './schema'
 
+type FullTextSearchIndexes = {
+  [EntityTypename: string]: string[]
+}
+
 type DatabaseConfig<DB extends DatabaseSchema = DatabaseSchema> = {
   kysely: ReactiveKysely<DB>
+  fts?: FullTextSearchIndexes
 }
 
 export type Mutation = Selectable<DatabaseSchema['mutations']>
@@ -20,16 +26,29 @@ export type Mutation = Selectable<DatabaseSchema['mutations']>
 export class Database<DB extends DatabaseSchema = DatabaseSchema> {
   private kysely: ReactiveKysely<DB>
 
-  private migrationPromise: undefined | Promise<MigrationResultSet>
+  private initPromise: undefined | Promise<void>
 
-  constructor({ kysely }: DatabaseConfig<DB>) {
+  protected fullTextSearchIndexes: FullTextSearchIndexes
+
+  constructor({ kysely, fts }: DatabaseConfig<DB>) {
     this.kysely = kysely
+    this.fullTextSearchIndexes = fts || {}
   }
 
-  public async migrate(): Promise<MigrationResultSet> {
-    if (!this.migrationPromise) {
-      this.migrationPromise = Promise.resolve().then(async () => {
-        await sql`
+  public async init(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = Promise.resolve().then(async () => {
+        await this.configure()
+        await this.migrate()
+        await this.createFullTextSearchIndexes()
+      })
+    }
+
+    return this.initPromise
+  }
+
+  protected async configure() {
+    await sql`
           -- Enable cascading deletes
           PRAGMA foreign_keys = ON;
           -- WAL mode for better concurrency
@@ -45,24 +64,96 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
           PRAGMA mmap_size = 268435456;
           -- Optimize for sequential writes
           PRAGMA temp_store = MEMORY;
-        `.execute(this.kysely)
+      `.execute(this.kysely)
+  }
 
-        const migrator = new Migrator({
-          db: this.kysely,
-          migrationTableName: 'repliql_kysely_migration',
-          provider: {
-            async getMigrations() {
-              const { migrations } = await import('./migrations')
-              return migrations
-            },
-          },
-        })
+  protected async migrate(): Promise<MigrationResultSet> {
+    const migrator = new Migrator({
+      db: this.kysely,
+      migrationTableName: 'repliql_kysely_migration',
+      provider: {
+        async getMigrations() {
+          const { migrations } = await import('./migrations')
+          return migrations
+        },
+      },
+    })
 
-        return migrator.migrateToLatest()
-      })
+    return migrator.migrateToLatest()
+  }
+
+  private async createFullTextSearchIndexes() {
+    for (const [__typename, fields] of Object.entries(this.fullTextSearchIndexes)) {
+      const ftsTableName = getFtsTableName(__typename)
+      const insertTriggerName = `${ftsTableName}_insert`
+      const updateTriggerName = `${ftsTableName}_update`
+      const deleteTriggerName = `${ftsTableName}_delete`
+      const ftsColumns = sql.join(fields.map(field => sql.ref(field)))
+      const dataFieldValues = (table: string) =>
+        sql.join(fields.map(field => sql`${sql.ref(`${table}.data`)}->${sql.lit(field)}`))
+
+      // Drop existing FTS table and triggers
+      await sql`
+        DROP TRIGGER IF EXISTS ${sql.table(insertTriggerName)};
+        DROP TRIGGER IF EXISTS ${sql.table(updateTriggerName)};
+        DROP TRIGGER IF EXISTS ${sql.table(deleteTriggerName)};
+        DROP TABLE IF EXISTS ${sql.table(ftsTableName)}
+      `.execute(this.kysely)
+
+      // Create FTS table (contentless_delete - we manage content via triggers)
+      // https://www.sqlite.org/fts5.html#contentless_delete_tables
+      await sql`
+        CREATE VIRTUAL TABLE ${sql.table(ftsTableName)} USING fts5(
+          ${ftsColumns},
+          tokenize='unicode61 remove_diacritics 2',
+          content='',
+          contentless_delete=1
+        );
+      `.execute(this.kysely)
+
+      // Create triggers
+      await sql`
+        CREATE TRIGGER ${sql.table(insertTriggerName)} 
+        AFTER INSERT ON ${sql.table(ENTITIES_TABLE_NAME)} 
+        WHEN ${sql.ref('NEW.__typename')} = ${sql.lit(__typename)}
+        BEGIN
+          INSERT INTO ${sql.table(ftsTableName)} (rowid, ${ftsColumns})
+          VALUES (NEW.rowid, ${dataFieldValues('NEW')}); 
+        END;
+      `.execute(this.kysely)
+
+      await sql`
+        CREATE TRIGGER ${sql.table(updateTriggerName)} 
+        AFTER UPDATE ON ${sql.table(ENTITIES_TABLE_NAME)} 
+        WHEN ${sql.ref('NEW.__typename')} = ${sql.lit(__typename)} OR ${sql.ref('OLD.__typename')} = ${sql.lit(__typename)}
+        BEGIN
+          INSERT OR REPLACE INTO ${sql.table(ftsTableName)} (rowid, ${ftsColumns})
+          SELECT NEW.rowid, ${dataFieldValues('NEW')}
+          WHERE ${sql.ref('NEW.__typename')} = ${sql.lit(__typename)};
+
+          DELETE FROM ${sql.table(ftsTableName)} 
+          WHERE ${sql.ref(`${ftsTableName}.rowid`)} = OLD.rowid 
+            AND ${sql.ref('NEW.__typename')} != ${sql.lit(__typename)};
+        END;
+      `.execute(this.kysely)
+
+      await sql`
+        CREATE TRIGGER ${sql.table(deleteTriggerName)} 
+        AFTER DELETE ON ${sql.table(ENTITIES_TABLE_NAME)} 
+        WHEN ${sql.ref('OLD.__typename')} = ${sql.lit(__typename)}
+        BEGIN
+          DELETE FROM ${sql.table(ftsTableName)} WHERE ${sql.ref(`${ftsTableName}.rowid`)} = OLD.rowid; 
+        END;
+      `.execute(this.kysely)
+
+      // Populate index with existing entities
+      await sql`
+        INSERT INTO ${sql.table(ftsTableName)} (rowid, ${ftsColumns})
+        SELECT rowid, ${dataFieldValues(ENTITIES_TABLE_NAME)}
+        FROM ${sql.table(ENTITIES_TABLE_NAME)}
+        WHERE ${sql.ref('__typename')} = ${sql.lit(__typename)}
+      `.execute(this.kysely)
     }
-
-    return this.migrationPromise
   }
 
   public get client(): ReactiveKysely<DatabaseSchema> {
@@ -183,10 +274,11 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
   public selectEntityPointersQuery(args: {
     __typename: string | [string, ...string[]]
     where?: WhereEntityData
+    fullTextSearch?: string
     orderBy?: OrderByEntityData
     limit?: number
   }) {
-    const { __typename, where, orderBy, limit } = args
+    const { __typename, where, orderBy, limit, fullTextSearch } = args
 
     const typenames: string[] = typeof __typename === 'string' ? [__typename] : __typename
     if (!typenames.length) {
@@ -221,6 +313,32 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
           )
         }
       }
+    }
+
+    if (fullTextSearch) {
+      const ftsTypenames = typenames.filter(t => t in this.fullTextSearchIndexes)
+
+      if (ftsTypenames.length === 0) {
+        throw new Error(
+          `No full-text search index exists for any of the types: ${typenames.join(', ')}`,
+        )
+      }
+
+      // Build subqueries for each FTS table
+      const ftsSubqueries = ftsTypenames.map(typename => {
+        const ftsTableName = getFtsTableName(typename)
+        return sql<{
+          rowid: number
+        }>`(SELECT rowid FROM ${sql.table(ftsTableName)} WHERE ${sql.table(ftsTableName)} MATCH ${fullTextSearch})`
+      })
+
+      // Combine with UNION ALL if multiple, otherwise just use the single subquery
+      const combinedSubquery =
+        ftsSubqueries.length === 1
+          ? ftsSubqueries[0]!
+          : sql<{ rowid: number }>`(${sql.join(ftsSubqueries, sql` UNION ALL `)})`
+
+      query = query.where(() => sql`entities.rowid IN ${combinedSubquery}`)
     }
 
     if (orderBy) {
@@ -574,4 +692,8 @@ function orderByEntityDataToOrders(
 
   traverse(orderBy, [])
   return results
+}
+
+function getFtsTableName(__typename: string): string {
+  return `repliql_fts_${__typename}`
 }

@@ -1,7 +1,6 @@
 import {
   queryToChangeSubscription,
   type ChangeSubscription,
-  type ReactiveKysely,
   type RowUpdate,
   type AnyTable,
   changeSubscriptionTables,
@@ -80,21 +79,19 @@ export type Resolvers = {
 }
 
 type RepliqlExchangeConfig = {
-  kysely: ReactiveKysely<DatabaseSchema>
+  db: Database
   resolvers: Resolvers
 }
 
-export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): Exchange {
+export function repliqlExchange({ db, resolvers }: RepliqlExchangeConfig): Exchange {
   return ({ forward, ...input }) => {
     return _operations$ => {
-      const db = new Database({ kysely })
-
       const mutationsProcessor = new MutationsProcessor({
         db,
         client: input.client,
       })
 
-      void db.migrate().then(() => mutationsProcessor.start())
+      void db.init().then(() => mutationsProcessor.start())
 
       const liveQueryOperations = makeOperationsRegistry<{
         operation: Operation
@@ -114,7 +111,7 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
           return
         }
 
-        const sub = pipe(kysely.getTableRowUpdateSource(table), subscribe(onTableRowUpdate))
+        const sub = pipe(db.client.getTableRowUpdateSource(table), subscribe(onTableRowUpdate))
         rowUpdateSubscriptionByTable.set(table, sub)
       }
 
@@ -266,7 +263,9 @@ export function repliqlExchange({ kysely, resolvers }: RepliqlExchangeConfig): E
           // Ensure we watch each table from sub
           const tables = changeSubscriptionTables(changeSub)
           if (tables === MATCH_ALL) {
-            kysely.getAllTables().then(tables => tables.map(table => watchTableRowUpdates(table)))
+            db.client
+              .getAllTables()
+              .then(tables => tables.map(table => watchTableRowUpdates(table)))
           } else {
             for (const table of tables) {
               watchTableRowUpdates(table)

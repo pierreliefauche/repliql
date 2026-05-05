@@ -5,7 +5,7 @@ import {
   replayCreateCallbackFunction,
 } from '@repliql/kysely-driver-bridge/shared'
 import { ReactiveKysely } from '@repliql/reactive-kysely'
-import { repliqlExchange, type DatabaseSchema, coldStartExchange } from '@repliql/repliql'
+import { repliqlExchange, type DatabaseSchema, coldStartExchange, Database } from '@repliql/repliql'
 import { SharedExchangeService } from '@repliql/shared-exchange/shared'
 import { SharedServicesManager } from '@repliql/shared-service/shared'
 import { expose } from 'comlink'
@@ -35,8 +35,18 @@ const kysely = new ReactiveKysely<DatabaseSchema>({
   queryUpdateDebounceMs: 0,
 })
 
-const repliql = repliqlExchange({
+const db = new Database({
   kysely,
+  fts: {
+    Issue: ['title', 'description'],
+  },
+})
+
+// @ts-ignore
+globalThis.db = db
+
+const repliql = repliqlExchange({
+  db,
   resolvers,
 })
 
