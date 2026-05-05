@@ -1,7 +1,18 @@
-import type { ReactiveKysely } from '@repliql/reactive-kysely'
-import { toJsonbPreserveNulls } from '@repliql/reactive-kysely'
+import type { ChangeSubscription, ReactiveKysely } from '@repliql/reactive-kysely'
+import {
+  queryToChangeSubscription,
+  toJsonbPreserveNulls,
+  selectTable,
+} from '@repliql/reactive-kysely'
 import { Entity, EntityRef, getEntityRef, isPrimitive, Primitive } from '@repliql/utils'
-import { type MigrationResultSet, Migrator, Selectable, sql, Transaction } from 'kysely'
+import {
+  type MigrationResultSet,
+  Migrator,
+  Selectable,
+  SelectQueryBuilder,
+  sql,
+  Transaction,
+} from 'kysely'
 
 import {
   ACTIVE_MUTATION_STATUSES,
@@ -113,36 +124,35 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
 
       // Create triggers
       await sql`
-        CREATE TRIGGER ${sql.table(insertTriggerName)} 
-        AFTER INSERT ON ${sql.table(ENTITIES_TABLE_NAME)} 
+        CREATE TRIGGER ${sql.table(insertTriggerName)}
+        AFTER INSERT ON ${sql.table(ENTITIES_TABLE_NAME)}
         WHEN ${sql.ref('NEW.__typename')} = ${sql.lit(__typename)}
         BEGIN
           INSERT INTO ${sql.table(ftsTableName)} (rowid, ${ftsColumns})
-          VALUES (NEW.rowid, ${dataFieldValues('NEW')}); 
+          VALUES (NEW.rowid, ${dataFieldValues('NEW')});
         END;
       `.execute(this.kysely)
 
       await sql`
-        CREATE TRIGGER ${sql.table(updateTriggerName)} 
-        AFTER UPDATE ON ${sql.table(ENTITIES_TABLE_NAME)} 
+        CREATE TRIGGER ${sql.table(updateTriggerName)}
+        AFTER UPDATE ON ${sql.table(ENTITIES_TABLE_NAME)}
         WHEN ${sql.ref('NEW.__typename')} = ${sql.lit(__typename)} OR ${sql.ref('OLD.__typename')} = ${sql.lit(__typename)}
         BEGIN
-          INSERT OR REPLACE INTO ${sql.table(ftsTableName)} (rowid, ${ftsColumns})
+          DELETE FROM ${sql.table(ftsTableName)}
+          WHERE ${sql.ref(`${ftsTableName}.rowid`)} = OLD.rowid;
+
+          INSERT INTO ${sql.table(ftsTableName)} (rowid, ${ftsColumns})
           SELECT NEW.rowid, ${dataFieldValues('NEW')}
           WHERE ${sql.ref('NEW.__typename')} = ${sql.lit(__typename)};
-
-          DELETE FROM ${sql.table(ftsTableName)} 
-          WHERE ${sql.ref(`${ftsTableName}.rowid`)} = OLD.rowid 
-            AND ${sql.ref('NEW.__typename')} != ${sql.lit(__typename)};
         END;
       `.execute(this.kysely)
 
       await sql`
-        CREATE TRIGGER ${sql.table(deleteTriggerName)} 
-        AFTER DELETE ON ${sql.table(ENTITIES_TABLE_NAME)} 
+        CREATE TRIGGER ${sql.table(deleteTriggerName)}
+        AFTER DELETE ON ${sql.table(ENTITIES_TABLE_NAME)}
         WHEN ${sql.ref('OLD.__typename')} = ${sql.lit(__typename)}
         BEGIN
-          DELETE FROM ${sql.table(ftsTableName)} WHERE ${sql.ref(`${ftsTableName}.rowid`)} = OLD.rowid; 
+          DELETE FROM ${sql.table(ftsTableName)} WHERE ${sql.ref(`${ftsTableName}.rowid`)} = OLD.rowid;
         END;
       `.execute(this.kysely)
 
@@ -277,7 +287,16 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
     fullTextSearch?: string
     orderBy?: OrderByEntityData
     limit?: number
-  }) {
+  }): {
+    query: SelectQueryBuilder<
+      DatabaseSchema,
+      'entities',
+      {
+        __ref: EntityRef
+      }
+    >
+    changeSubscription: ChangeSubscription<DatabaseSchema> | undefined
+  } {
     const { __typename, where, orderBy, limit, fullTextSearch } = args
 
     const typenames: string[] = typeof __typename === 'string' ? [__typename] : __typename
@@ -315,32 +334,6 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       }
     }
 
-    if (fullTextSearch) {
-      const ftsTypenames = typenames.filter(t => t in this.fullTextSearchIndexes)
-
-      if (ftsTypenames.length === 0) {
-        throw new Error(
-          `No full-text search index exists for any of the types: ${typenames.join(', ')}`,
-        )
-      }
-
-      // Build subqueries for each FTS table
-      const ftsSubqueries = ftsTypenames.map(typename => {
-        const ftsTableName = getFtsTableName(typename)
-        return sql<{
-          rowid: number
-        }>`(SELECT rowid FROM ${sql.table(ftsTableName)} WHERE ${sql.table(ftsTableName)} MATCH ${fullTextSearch})`
-      })
-
-      // Combine with UNION ALL if multiple, otherwise just use the single subquery
-      const combinedSubquery =
-        ftsSubqueries.length === 1
-          ? ftsSubqueries[0]!
-          : sql<{ rowid: number }>`(${sql.join(ftsSubqueries, sql` UNION ALL `)})`
-
-      query = query.where(() => sql`entities.rowid IN ${combinedSubquery}`)
-    }
-
     if (orderBy) {
       const sorts = orderByEntityDataToOrders(orderBy)
 
@@ -365,7 +358,47 @@ export class Database<DB extends DatabaseSchema = DatabaseSchema> {
       query = query.limit(limit)
     }
 
-    return query
+    // Compute query change sub BEFORE adding FTS
+    let changeSubscription = queryToChangeSubscription<DatabaseSchema>(query)
+
+    if (fullTextSearch) {
+      const ftsTypenames = typenames.filter(t => t in this.fullTextSearchIndexes)
+
+      if (ftsTypenames.length === 0) {
+        throw new Error(
+          `No full-text search index exists for any of the types: ${typenames.join(', ')}`,
+        )
+      }
+
+      // Build subqueries for each FTS table
+      const ftsSubqueries = ftsTypenames.map(typename => {
+        const ftsTableName = getFtsTableName(typename)
+
+        // Add FTS fields to change subscription selection
+        if (changeSubscription) {
+          const ftsFields = this.fullTextSearchIndexes[typename]
+          if (ftsFields?.length) {
+            for (const field of ftsFields) {
+              changeSubscription = selectTable(changeSubscription, 'entities', {
+                data: { [field]: true },
+              })
+            }
+          }
+        }
+
+        return sql`(SELECT rowid FROM ${sql.table(ftsTableName)} WHERE ${sql.table(ftsTableName)} MATCH ${fullTextSearch})`
+      })
+
+      // Combine with UNION ALL if multiple, otherwise just use the single subquery
+      const combinedSubquery =
+        ftsSubqueries.length === 1
+          ? ftsSubqueries[0]!
+          : sql`(${sql.join(ftsSubqueries, sql` UNION ALL `)})`
+
+      query = query.where(() => sql`entities.rowid IN ${combinedSubquery}`)
+    }
+
+    return { query, changeSubscription }
   }
 
   public async insertMutation(args: {

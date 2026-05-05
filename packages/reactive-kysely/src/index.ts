@@ -1,7 +1,7 @@
 export { ReactiveKysely } from './ReactiveKysely'
 
 export type { ChangeSubscription } from './ChangeSubscription'
-export { changeSubscriptionTables, MATCH_ALL } from './ChangeSubscription'
+export * from './ChangeSubscription'
 
 export { queryToChangeSubscription } from './queryToChangeSubscription'
 

@@ -1,5 +1,4 @@
 import {
-  queryToChangeSubscription,
   type ChangeSubscription,
   type RowUpdate,
   type AnyTable,
@@ -317,11 +316,10 @@ export function repliqlExchange({ db, resolvers }: RepliqlExchangeConfig): Excha
         }
 
         const filterEntityPointers: BaseResolverContext['filterEntityPointers'] = async args => {
-          const query = db.selectEntityPointersQuery(args)
+          const { query, changeSubscription } = db.selectEntityPointersQuery(args)
 
-          const changeSub = queryToChangeSubscription(query)
-          if (changeSub) {
-            visits.changeSubscriptions.push(changeSub)
+          if (changeSubscription) {
+            visits.changeSubscriptions.push(changeSubscription)
           }
 
           return query.execute()
