@@ -1,15 +1,20 @@
 import { ArrowSquareOutIcon, X } from '@phosphor-icons/react'
 import { DateTime } from 'luxon'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation } from 'urql'
 
 import { PrioritySelect } from '@/components/PrioritySelect'
 import { StatusSelect } from '@/components/StatusSelect'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import {
   ISSUE_DETAIL_QUERY,
+  UPDATE_ISSUE_DESCRIPTION_MUTATION,
   UPDATE_ISSUE_PRIORITY_MUTATION,
   UPDATE_ISSUE_STATE_MUTATION,
+  UPDATE_ISSUE_TITLE_MUTATION,
 } from '@/graphql/queries'
 
 interface IssueDetailProps {
@@ -25,8 +30,36 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
   })
   const [, updatePriority] = useMutation(UPDATE_ISSUE_PRIORITY_MUTATION)
   const [, updateState] = useMutation(UPDATE_ISSUE_STATE_MUTATION)
+  const [, updateTitle] = useMutation(UPDATE_ISSUE_TITLE_MUTATION)
+  const [, updateDescription] = useMutation(UPDATE_ISSUE_DESCRIPTION_MUTATION)
 
   const issue = data?.issue
+
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleValue, setTitleValue] = useState('')
+  const [editingDescription, setEditingDescription] = useState(false)
+  const [descriptionValue, setDescriptionValue] = useState('')
+
+  useEffect(() => {
+    if (issue?.title) {
+      setTitleValue(issue.title)
+    }
+    setDescriptionValue(issue?.description ?? '')
+  }, [issue?.title, issue?.description])
+
+  const handleTitleSubmit = () => {
+    if (titleValue.trim() && titleValue !== issue?.title) {
+      updateTitle({ id: issue.id, title: titleValue.trim() })
+    }
+    setEditingTitle(false)
+  }
+
+  const handleDescriptionSubmit = () => {
+    if (descriptionValue !== issue?.description) {
+      updateDescription({ id: issue.id, description: descriptionValue })
+    }
+    setEditingDescription(false)
+  }
 
   console.log('RENDER ISSUE DETAIL', { fetching, data })
 
@@ -54,7 +87,29 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
           </div>
         ) : issue ? (
           <div className="space-y-5">
-            <h2 className="text-sm font-medium leading-snug">{issue.title}</h2>
+            {editingTitle ? (
+              <Input
+                value={titleValue}
+                onChange={e => setTitleValue(e.target.value)}
+                onBlur={handleTitleSubmit}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleTitleSubmit()
+                  if (e.key === 'Escape') {
+                    setTitleValue(issue.title)
+                    setEditingTitle(false)
+                  }
+                }}
+                autoFocus
+                className="text-sm font-medium"
+              />
+            ) : (
+              <h2
+                className="text-sm font-medium leading-snug cursor-pointer hover:bg-secondary/50 rounded px-1 -mx-1 py-0.5"
+                onClick={() => setEditingTitle(true)}
+              >
+                {issue.title}
+              </h2>
+            )}
 
             {/* Status & Priority */}
             <div className="grid grid-cols-2 gap-4">
@@ -134,14 +189,33 @@ export function IssueDetail({ issueId, onClose }: IssueDetailProps) {
             )}
 
             {/* Description */}
-            {issue.description && (
-              <div>
-                <p className="mb-1.5 text-xs text-muted-foreground">Description</p>
-                <div className="max-h-64 overflow-y-auto rounded-md border bg-secondary/30 p-3 text-sm whitespace-pre-wrap leading-relaxed">
-                  {issue.description}
+            <div>
+              <p className="mb-1.5 text-xs text-muted-foreground">Description</p>
+              {editingDescription ? (
+                <Textarea
+                  value={descriptionValue}
+                  onChange={e => setDescriptionValue(e.target.value)}
+                  onBlur={handleDescriptionSubmit}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') {
+                      setDescriptionValue(issue.description ?? '')
+                      setEditingDescription(false)
+                    }
+                  }}
+                  autoFocus
+                  className="min-h-32 text-sm"
+                />
+              ) : (
+                <div
+                  className="max-h-64 overflow-y-auto rounded-md border bg-secondary/30 p-3 text-sm whitespace-pre-wrap leading-relaxed cursor-pointer hover:bg-secondary/50"
+                  onClick={() => setEditingDescription(true)}
+                >
+                  {issue.description || (
+                    <span className="text-muted-foreground italic">No description</span>
+                  )}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Timestamps */}
             <div className="grid grid-cols-2 gap-4 border-t pt-4 text-xs text-muted-foreground">

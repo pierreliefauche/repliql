@@ -21,6 +21,22 @@ export const resolvers: Resolvers = {
     //   return { nodes: issues }
     // },
 
+    searchIssues: async (_, args: { term: string; first?: number }, ctx) => {
+      const pointers = await ctx.filterEntityPointers({
+        __typename: 'Issue',
+        fullTextSearch: args.term,
+        limit: args.first,
+      })
+
+      const refs = pointers.map(p => p.__ref)
+      const issuesOrErrors = await ctx.entityByRef.loadMany(refs)
+
+      const issues = issuesOrErrors.filter(i => i && '__typename' in i)
+
+      // Cheat by swapping typename
+      return { nodes: issues.map(entity => ({ ...entity, __typename: 'IssueSearchResult' })) }
+    },
+
     projects: async (_, args: { first: number; orderBy: string }, ctx) => {
       const projects = await ctx.filterEntityPointers({
         __typename: 'Project',
@@ -56,7 +72,10 @@ export const resolvers: Resolvers = {
   Mutation: {
     issueUpdate: async (
       _,
-      args: { id: string; input: { stateId?: string; priority?: number } },
+      args: {
+        id: string
+        input: { stateId?: string; priority?: number; title?: string; description?: string }
+      },
       ctx,
     ) => {
       const { id: issueId, input } = args
@@ -66,6 +85,8 @@ export const resolvers: Resolvers = {
         id: issueId,
         priority: input.priority,
         state: input.stateId ? pointsTo('WorkflowState', input.stateId) : undefined,
+        title: input.title,
+        description: input.description,
       })
 
       return { success: true, issue }

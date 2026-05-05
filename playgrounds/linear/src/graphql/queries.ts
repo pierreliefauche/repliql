@@ -30,6 +30,28 @@ const ISSUE_ITEM_FRAGMENT = gql`
   ${WORKFLOW_STATE_MIN_FRAGMENT}
 `
 
+const ISSUE_SEARCH_RESULT_ITEM_FRAGMENT = gql`
+  fragment IssueSearchResultItem on IssueSearchResult {
+    id
+    identifier
+    title
+    priority
+    state {
+      ...WorkflowStateMin
+    }
+    assignee {
+      __typename
+      id
+      name
+      avatarUrl
+    }
+    createdAt
+    updatedAt
+  }
+
+  ${WORKFLOW_STATE_MIN_FRAGMENT}
+`
+
 const ISSUE_DETAIL_FRAGMENT = gql`
   fragment IssueDetail on Issue {
     id
@@ -161,4 +183,40 @@ export const UPDATE_ISSUE_PRIORITY_MUTATION = gql`
       }
     }
   }
+`
+
+export const UPDATE_ISSUE_TITLE_MUTATION = gql`
+  mutation UpdateIssueTitle($id: String!, $title: String!) {
+    issueUpdate(id: $id, input: { title: $title }) {
+      success
+      issue {
+        id
+        title
+      }
+    }
+  }
+`
+
+export const UPDATE_ISSUE_DESCRIPTION_MUTATION = gql`
+  mutation UpdateIssueDescription($id: String!, $description: String!) {
+    issueUpdate(id: $id, input: { description: $description }) {
+      success
+      issue {
+        id
+        description
+      }
+    }
+  }
+`
+
+export const SEARCH_ISSUES_QUERY = gql`
+  query SearchIssues($term: String!, $first: Int) {
+    searchIssues(term: $term, first: $first) {
+      nodes {
+        ...IssueSearchResultItem
+      }
+    }
+  }
+
+  ${ISSUE_SEARCH_RESULT_ITEM_FRAGMENT}
 `

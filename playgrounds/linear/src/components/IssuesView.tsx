@@ -1,11 +1,14 @@
 import { DateTime } from 'luxon'
+import { useState } from 'react'
 import { useQuery } from 'urql'
 import { Link, Route, useLocation } from 'wouter'
 
 import { IssueDetail } from '@/components/IssueDetail'
 import { PriorityBadge } from '@/components/PriorityBadge'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ISSUES_QUERY } from '@/graphql/queries'
+import { ISSUES_QUERY, SEARCH_ISSUES_QUERY } from '@/graphql/queries'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 
 function IssueItem({ issue }: { issue: any }) {
   return (
@@ -51,10 +54,27 @@ function IssueItem({ issue }: { issue: any }) {
 
 export function IssuesView() {
   const [, navigate] = useLocation()
-  const [{ data, fetching, error }] = useQuery({
+  const [searchTerm, setSearchTerm] = useState('')
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 30)
+
+  const isSearching = debouncedSearchTerm.trim().length > 0
+
+  const [{ data: issuesData, fetching: issuesFetching, error: issuesError }] = useQuery({
     query: ISSUES_QUERY,
     variables: { first: 50 },
+    pause: isSearching,
   })
+
+  const [{ data: searchData, fetching: searchFetching, error: searchError }] = useQuery({
+    query: SEARCH_ISSUES_QUERY,
+    variables: { term: debouncedSearchTerm, first: 50 },
+    pause: !isSearching,
+    requestPolicy: 'cache-only',
+  })
+
+  const data = isSearching ? searchData?.searchIssues : issuesData?.issues
+  const fetching = isSearching ? searchFetching : issuesFetching
+  const error = isSearching ? searchError : issuesError
 
   console.log('RENDER ISSUES LIST', { fetching, data, error })
 
@@ -69,7 +89,16 @@ export function IssuesView() {
   return (
     <div className="flex h-full">
       <div className="flex-1 overflow-auto p-6">
-        <h1 className="mb-6 text-lg font-semibold">Issues</h1>
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <h1 className="text-lg font-semibold">Issues</h1>
+          <Input
+            type="search"
+            placeholder="Search issues..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="max-w-xs"
+          />
+        </div>
 
         {fetching && !data ? (
           <div className="space-y-3">
@@ -79,7 +108,7 @@ export function IssuesView() {
           </div>
         ) : (
           <div className="divide-y divide-border rounded-lg border">
-            {data?.issues?.nodes?.map((issue: any) => (
+            {data?.nodes?.map((issue: any) => (
               <IssueItem key={issue.id} issue={issue} />
             ))}
           </div>
