@@ -1,6 +1,8 @@
-# Repliql
+# RepliQL
 
-Repliql is an offline-first cache and local database extension for [URQL](https://formidable.com/open-source/urql/), the GraphQL client. It enables data-heavy applications to work seamlessly offline while maintaining data consistency.
+> pronounced "replical"
+
+RepliQL is an offline-first cache and local database extension for [URQL](https://formidable.com/open-source/urql/), the GraphQL client. It enables data-heavy applications to work seamlessly offline while maintaining data consistency.
 
 ## Overview
 
