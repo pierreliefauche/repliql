@@ -9,18 +9,6 @@ export const resolvers: Resolvers = {
   Query: {
     issue: (_, args: { id: string }, _ctx) => pointsTo('Issue', args.id),
 
-    // issues: async (_, args: { first: number; orderBy: string }, ctx) => {
-    //   const issues = await ctx.filterEntityPointers({
-    //     __typename: 'Issue',
-    //     orderBy: {
-    //       updatedAt: 'desc',
-    //     },
-    //     limit: args.first,
-    //   })
-
-    //   return { nodes: issues }
-    // },
-
     projects: async (_, args: { first: number; orderBy: string }, ctx) => {
       const projects = await ctx.filterEntityPointers({
         __typename: 'Project',
