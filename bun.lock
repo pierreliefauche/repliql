@@ -18,7 +18,7 @@
     },
     "packages/conduit": {
       "name": "@repliql/conduit",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@repliql/utils": "workspace:*",
       },
@@ -31,7 +31,7 @@
     },
     "packages/kysely-driver-bridge": {
       "name": "@repliql/kysely-driver-bridge",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@repliql/conduit": "workspace:*",
         "@repliql/utils": "workspace:*",
@@ -47,7 +47,7 @@
     },
     "packages/reactive-kysely": {
       "name": "@repliql/reactive-kysely",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@repliql/utils": "workspace:*",
         "wonka": "catalog:",
@@ -67,7 +67,7 @@
     },
     "packages/repliql": {
       "name": "@repliql/repliql",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@0no-co/graphql.web": "catalog:",
         "@repliql/reactive-kysely": "workspace:*",
@@ -81,7 +81,7 @@
     },
     "packages/shared-exchange": {
       "name": "@repliql/shared-exchange",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@repliql/shared-service": "workspace:*",
       },
@@ -99,7 +99,7 @@
     },
     "packages/shared-service": {
       "name": "@repliql/shared-service",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@repliql/utils": "workspace:*",
       },
@@ -110,11 +110,12 @@
     },
     "packages/utils": {
       "name": "@repliql/utils",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@0no-co/graphql.web": "catalog:",
         "@solana/fast-stable-stringify": "^6.8.0",
         "@urql/core": "catalog:",
+        "comlink": "catalog:",
         "strict-event-emitter": "^0.5.1",
         "wonka": "catalog:",
       },

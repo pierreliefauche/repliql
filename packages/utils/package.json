@@ -36,6 +36,7 @@
     "@0no-co/graphql.web": "catalog:",
     "@solana/fast-stable-stringify": "^6.8.0",
     "@urql/core": "catalog:",
+    "comlink": "catalog:",
     "strict-event-emitter": "^0.5.1",
     "wonka": "catalog:"
   },

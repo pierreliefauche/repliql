@@ -9,6 +9,7 @@ export { areEqual } from './areEqual'
 export { EventEmitter } from './EventEmitter'
 export { heartbeat } from './heartbeat'
 export type { Heartbeat } from './heartbeat'
+export { exposeComlinkSource, sourceFromComlink } from './comlinkSource'
 export { makeLogger } from './logger'
 export type { LoggerConfig, LogLevel, Logger } from './logger'
 

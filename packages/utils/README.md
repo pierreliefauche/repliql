@@ -33,6 +33,7 @@ const key = phash(stableStringify({ b: 1, a: 2 }))
 ### Reactive helpers
 
 - **`SourceMap`** — a `Map`-like cache of [`wonka`](https://www.npmjs.com/package/wonka) `Source`s that creates and shares streams on demand.
+- **`exposeComlinkSource(source)`** / **`sourceFromComlink(remoteSource)`** — bridge a Wonka `Source` across a Comlink boundary (worker, shared worker, iframe, or tab process) while preserving unsubscribe/complete semantics.
 - **`EventEmitter`** — a tiny strictly-typed event emitter (re-exporting [`strict-event-emitter`](https://www.npmjs.com/package/strict-event-emitter) semantics).
 
 ### Logging
